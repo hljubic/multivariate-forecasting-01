@@ -6,7 +6,6 @@ from layers.SelfAttention_Family import FlashAttention, AttentionLayer, FullAtte
 from layers.Embed import DataEmbedding
 import numpy as np
 
-
 class Model(nn.Module):
     """
     Vanilla Transformer
