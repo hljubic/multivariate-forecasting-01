@@ -1,5 +1,5 @@
 model_name=SOFTS
-python -u run.py \
+python3.8 -u run.py \
   --task_name long_term_forecast \
   --is_training 1 \
   --root_path ./dataset/traffic/ \
