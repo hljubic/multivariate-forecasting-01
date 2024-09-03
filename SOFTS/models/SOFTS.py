@@ -7,7 +7,7 @@ from layers.Transformer_EncDec import Encoder, EncoderLayer
 
 
 class LeakyCustomActivation(nn.Module):
-    def __init__(self, negative_slope=0.01, positive_slope=0.01):
+    def __init__(self, negative_slope=0.2, positive_slope=0.2):
         super(LeakyCustomActivation, self).__init__()
         self.negative_slope = negative_slope
         self.positive_slope = positive_slope
