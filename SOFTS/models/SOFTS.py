@@ -28,6 +28,17 @@ class LearnableAsymCauchy(nn.Module):
         neg_part = 1 / (1 + self.beta * torch.relu(-x) ** 2)
         return pos_part - neg_part
 
+class AsymCauchy(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(AsymCauchy, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+
+    def forward(self, x):
+        # Apply the piecewise AsymCauchy function
+        pos_part = 1 / (1 + self.alpha * x.pow(2))
+        neg_part = -1 / (1 + self.beta * x.pow(2))
+        return torch.where(x >= 0, pos_part, neg_part)
 
 class STAR(nn.Module):
     def __init__(self, d_series, d_core):
@@ -41,7 +52,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = CustomActivation()
+        self.activation = AsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape

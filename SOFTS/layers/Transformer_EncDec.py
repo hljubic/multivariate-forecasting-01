@@ -15,6 +15,17 @@ class LearnableAsymCauchy(nn.Module):
         return pos_part - neg_part
 
 
+class AsymCauchy(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(AsymCauchy, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+
+    def forward(self, x):
+        # Apply the piecewise AsymCauchy function
+        pos_part = 1 / (1 + self.alpha * x.pow(2))
+        neg_part = -1 / (1 + self.beta * x.pow(2))
+        return torch.where(x >= 0, pos_part, neg_part)
 
 class CustomActivation(nn.Module):
     def __init__(self):
@@ -36,7 +47,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation = CustomActivation() #F.relu if activation == "relu" else F.gelu
+        self.activation = AsymCauchy() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(
