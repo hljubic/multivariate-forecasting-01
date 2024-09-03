@@ -1,4 +1,13 @@
 model_name=SOFTS
+class CustomActivation(nn.Module):
+    def __init__(self):
+        super(CustomActivation, self).__init__()
+
+    def forward(self, x):
+        # Apply the custom piecewise function
+        out = torch.where(x <= -1, torch.zeros_like(x),
+                          torch.where(x >= 1, torch.ones_like(x), 0.5 * x + 0.5))
+        return out
 
 python -u run.py \
   --is_training 1 \
