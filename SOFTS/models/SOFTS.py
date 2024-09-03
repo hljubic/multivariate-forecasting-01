@@ -5,6 +5,17 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
+
+class CustomActivation(nn.Module):
+    def __init__(self):
+        super(CustomActivation, self).__init__()
+
+    def forward(self, x):
+        # Apply the custom piecewise function
+        out = torch.where(x <= -1, torch.zeros_like(x),
+                          torch.where(x >= 1, torch.ones_like(x), 0.5 * x + 0.5))
+        return out
+
 class LearnableAsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LearnableAsymCauchy, self).__init__()
@@ -30,7 +41,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = LearnableAsymCauchy()
+        self.activation = CustomActivation()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
