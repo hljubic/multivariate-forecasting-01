@@ -6,6 +6,17 @@ from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
 
+class LearnableAsymCauchy44(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(LearnableAsymCauchy44, self).__init__()
+        # Inicijalizacija parametara kao trenirajući parametri
+        self.alpha = 1.3#nn.Parameter(torch.tensor(alpha))
+        self.beta = 0.7#nn.Parameter(torch.tensor(beta))
+
+    def forward(self, x):
+        pos_part = torch.exp(x) / (1 + alpha * torch.relu(x) ** 2)
+        neg_part = torch.exp(-x) / (1 + beta * torch.relu(-x) ** 2)
+        return pos_part - neg_part
 class LeakyCustomActivation(nn.Module):
     def __init__(self, negative_slope=0.2, positive_slope=0.2):
         super(LeakyCustomActivation, self).__init__()
@@ -63,7 +74,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = LeakyCustomActivation()
+        self.activation = LearnableAsymCauchy44()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
