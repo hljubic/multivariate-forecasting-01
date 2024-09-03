@@ -10,8 +10,8 @@ class LearnableAsymCauchy44(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LearnableAsymCauchy44, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = 1.3#nn.Parameter(torch.tensor(alpha))
-        self.beta = 0.7#nn.Parameter(torch.tensor(beta))
+        self.alpha = 1.0#nn.Parameter(torch.tensor(alpha))
+        self.beta = 1.0#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
         alpha = 1.3#nn.Parameter(torch.tensor(alpha))
@@ -77,7 +77,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = nn.Sigmoid()
+        self.activation = LearnableAsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
