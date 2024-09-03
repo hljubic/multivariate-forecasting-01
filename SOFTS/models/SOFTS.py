@@ -14,9 +14,12 @@ class LearnableAsymCauchy44(nn.Module):
         self.beta = 0.7#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
+        alpha = 1.3#nn.Parameter(torch.tensor(alpha))
+        beta = 0.7#nn.Parameter(torch.tensor(beta))
         pos_part = torch.exp(x) / (1 + alpha * torch.relu(x) ** 2)
         neg_part = torch.exp(-x) / (1 + beta * torch.relu(-x) ** 2)
         return pos_part - neg_part
+
 class LeakyCustomActivation(nn.Module):
     def __init__(self, negative_slope=0.2, positive_slope=0.2):
         super(LeakyCustomActivation, self).__init__()
