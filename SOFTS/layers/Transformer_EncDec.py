@@ -10,8 +10,6 @@ class LearnableAsymCauchy(nn.Module):
         self.beta = 0.7#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
-        alpha = 1.3#nn.Parameter(torch.tensor(alpha))
-        beta = 0.7#nn.Parameter(torch.tensor(beta))
         pos_part = 1 / (1 + self.alpha * torch.relu(x) ** 2)
         neg_part = 1 / (1 + self.beta * torch.relu(-x) ** 2)
         return pos_part - neg_part
@@ -25,6 +23,8 @@ class LearnableAsymCauchy44(nn.Module):
         self.beta = 0.7#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
+        alpha = 1.3#nn.Parameter(torch.tensor(alpha))
+        beta = 0.7#nn.Parameter(torch.tensor(beta))
         pos_part = torch.exp(x) / (1 + alpha * torch.relu(x) ** 2)
         neg_part = torch.exp(-x) / (1 + beta * torch.relu(-x) ** 2)
         return pos_part - neg_part
