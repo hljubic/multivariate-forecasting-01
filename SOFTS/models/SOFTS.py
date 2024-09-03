@@ -6,6 +6,17 @@ from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
 
+class LeakyCustomActivation(nn.Module):
+    def __init__(self, negative_slope=0.01, positive_slope=0.01):
+        super(LeakyCustomActivation, self).__init__()
+        self.negative_slope = negative_slope
+        self.positive_slope = positive_slope
+
+    def forward(self, x):
+        # Apply the leaky custom piecewise function
+        out = torch.where(x <= -1, self.negative_slope * (x + 1),
+                          torch.where(x >= 1, self.positive_slope * (x - 1) + 1, 0.5 * x + 0.5))
+        return out
 class CustomActivation(nn.Module):
     def __init__(self):
         super(CustomActivation, self).__init__()
@@ -52,7 +63,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = AsymCauchy()
+        self.activation = LeakyCustomActivation()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape

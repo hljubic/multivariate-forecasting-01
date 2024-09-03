@@ -15,6 +15,17 @@ class LearnableAsymCauchy(nn.Module):
         return pos_part - neg_part
 
 
+class LeakyCustomActivation(nn.Module):
+    def __init__(self, negative_slope=0.01, positive_slope=0.01):
+        super(LeakyCustomActivation, self).__init__()
+        self.negative_slope = negative_slope
+        self.positive_slope = positive_slope
+
+    def forward(self, x):
+        # Apply the leaky custom piecewise function
+        out = torch.where(x <= -1, self.negative_slope * (x + 1),
+                          torch.where(x >= 1, self.positive_slope * (x - 1) + 1, 0.5 * x + 0.5))
+        return out
 class AsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(AsymCauchy, self).__init__()
@@ -47,7 +58,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation = AsymCauchy() #F.relu if activation == "relu" else F.gelu
+        self.activation = LeakyCustomActivation() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(
