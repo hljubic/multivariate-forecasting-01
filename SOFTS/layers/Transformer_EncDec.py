@@ -11,10 +11,17 @@ class LearnableAsymCauchy(nn.Module):
 
     def forward(self, x):
         alpha = 1.0
-        beta = 1.0
-        pos_part = 1 / (1 + alpha * torch.relu(-x) ** 2)  # Prvi dio za negativne x
-        neg_part = 1 / (1 + beta * torch.relu(x) ** 2)    # Drugi dio za pozitivne x
-        return pos_part - neg_part
+        beta = 1.0 # Linearni prijelaz za vrijednosti blizu nule
+        epsilon=0.2
+        linear_part = x * (torch.abs(x) < epsilon).float()
+
+        # Pozitivni dio za x >= epsilon
+        pos_part = 1 / (1 + alpha * torch.relu(x) ** 2) * (x >= epsilon).float()
+
+        # Negativni dio za x <= -epsilon
+        neg_part = 1 / (1 + beta * torch.relu(-x) ** 2) * (x <= -epsilon).float()
+
+        return linear_part + pos_part - neg_part
 
 
 class LearnableAsymCauchy44(nn.Module):
@@ -76,7 +83,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  nn.Sigmoid()#LearnableAsymCauchy() #F.relu if activation == "relu" else F.gelu
+        self.activation =  LearnableAsymCauchy() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(

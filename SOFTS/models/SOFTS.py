@@ -50,10 +50,17 @@ class LearnableAsymCauchy(nn.Module):
 
     def forward(self, x):
         alpha = 1.0
-        beta = 1.0
-        pos_part = 1 / (1 + alpha * torch.relu(-x) ** 2)  # Prvi dio za negativne x
-        neg_part = 1 / (1 + beta * torch.relu(x) ** 2)    # Drugi dio za pozitivne x
-        return pos_part - neg_part
+        beta = 1.0 # Linearni prijelaz za vrijednosti blizu nule
+        epsilon=0.2
+        linear_part = x * (torch.abs(x) < epsilon).float()
+
+        # Pozitivni dio za x >= epsilon
+        pos_part = 1 / (1 + alpha * torch.relu(x) ** 2) * (x >= epsilon).float()
+
+        # Negativni dio za x <= -epsilon
+        neg_part = 1 / (1 + beta * torch.relu(-x) ** 2) * (x <= -epsilon).float()
+
+        return linear_part + pos_part - neg_part
 
 class AsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -79,7 +86,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = nn.Sigmoid()#LearnableAsymCauchy()
+        self.activation = LearnableAsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
