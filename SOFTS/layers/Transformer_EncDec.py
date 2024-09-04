@@ -11,18 +11,19 @@ class LearnableAsymCauchy(nn.Module):
 
     def forward(self, x):
 
-        alpha = self.alpha
-        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
+        a = 1
+        b = 0.30635
 
-        # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
-        relu_x = torch.relu(x)
-        relu_neg_x = torch.relu(-x)
+        # Radijus r(θ)
+        r = a * torch.exp(b * x)
 
-        # Direktna primjena u formuli
-        pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
-        neg_part = 1 / (1 + beta * relu_x ** 2)
+        # Izračunavanje kartezijanskih komponenti
+        x_spiral = r * torch.cos(x)
+        y_spiral = r * torch.sin(x)
 
-        return pos_part - neg_part
+        # Možemo vratiti samo jednu komponentu (x ili y) ili kombinirati
+        return x_spiral  # Ili vrati kombinaciju torch.stack([x_spiral, y_spiral], dim=-1)
+
 
 
 class LearnableAsymCauchy44(nn.Module):
