@@ -6,24 +6,26 @@ class LearnableAsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LearnableAsymCauchy, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-        self.beta = nn.Parameter(torch.tensor(beta))
+        self.alpha = 1.0#nn.Parameter(torch.tensor(alpha))
+        self.beta = 1.0#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
 
-        a = 1
-        b = 0.30635
+        alpha = self.alpha
+        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
 
-        # Radijus r(θ)
-        r = a * torch.exp(b * x)
+        relu_x = torch.relu(x)
+        relu_neg_x = torch.relu(-x)
 
-        # Izračunavanje kartezijanskih komponenti
-        x_spiral = r * torch.cos(x)
-        y_spiral = r * torch.sin(x)
+        # Direktna primjena formule
+        pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
+        neg_part = 1 / (1 + beta * relu_x ** 2)
 
-        # Možemo vratiti samo jednu komponentu (x ili y) ili kombinirati
-        return x_spiral  # Ili vrati kombinaciju torch.stack([x_spiral, y_spiral], dim=-1)
+        # Dodavanje sinus i kosinus komponenti
+        pos_part = pos_part + torch.sin(x)
+        neg_part = neg_part + torch.cos(x)
 
+        return pos_part - neg_part
 
 
 class LearnableAsymCauchy44(nn.Module):
