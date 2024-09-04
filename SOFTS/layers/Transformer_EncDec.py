@@ -11,8 +11,8 @@ class LearnableAsymCauchy(nn.Module):
 
     def forward(self, x):
 
-        alpha = 1.0
-        beta = 1.0 # Linearni prijelaz za vrijednosti blizu nule
+        alpha = 0.8
+        beta = 0.3 # Linearni prijelaz za vrijednosti blizu nule
 
         # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
         relu_x = torch.relu(x)
