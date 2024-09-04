@@ -468,6 +468,7 @@ class Dataset_Pred(Dataset):
         '''
         df_raw.columns: ['date', ...(other features), target feature]
         '''
+        print(df_raw)
         if self.cols:
             cols = self.cols.copy()
             if self.target in cols:
