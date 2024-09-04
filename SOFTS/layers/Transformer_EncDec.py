@@ -6,24 +6,21 @@ class LearnableAsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LearnableAsymCauchy, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = 1.0#nn.Parameter(torch.tensor(alpha))
-        self.beta = 1.0#nn.Parameter(torch.tensor(beta))
+        self.alpha = 1.3#nn.Parameter(torch.tensor(alpha))
+        self.beta = 0.7#nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
 
         alpha = self.alpha
         beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
 
+        # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
         relu_x = torch.relu(x)
         relu_neg_x = torch.relu(-x)
 
-        # Direktna primjena formule
+        # Direktna primjena u formuli
         pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
         neg_part = 1 / (1 + beta * relu_x ** 2)
-
-        # Dodavanje sinus i kosinus komponenti
-        pos_part = pos_part + torch.sin(x)
-        neg_part = neg_part + torch.cos(x)
 
         return pos_part - neg_part
 
@@ -87,7 +84,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  LearnableAsymCauchy() #F.relu if activation == "relu" else F.gelu
+        self.activation =  F.relu#LearnableAsymCauchy() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(
