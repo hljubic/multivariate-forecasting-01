@@ -79,7 +79,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = nn.Tanh()#LearnableAsymCauchy()
+        self.activation = nn.Sigmoid()#LearnableAsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
