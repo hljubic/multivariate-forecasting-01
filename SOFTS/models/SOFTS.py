@@ -51,16 +51,16 @@ class LearnableAsymCauchy(nn.Module):
     def forward(self, x):
         alpha = 1.0
         beta = 1.0 # Linearni prijelaz za vrijednosti blizu nule
-        epsilon=0.2
-        linear_part = x * (torch.abs(x) < epsilon).float()
 
-        # Pozitivni dio za x >= epsilon
-        pos_part = 1 / (1 + alpha * torch.relu(x) ** 2) * (x >= epsilon).float()
+        # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
+        relu_x = torch.relu(x)
+        relu_neg_x = torch.relu(-x)
 
-        # Negativni dio za x <= -epsilon
-        neg_part = 1 / (1 + beta * torch.relu(-x) ** 2) * (x <= -epsilon).float()
+        # Direktna primjena u formuli
+        pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
+        neg_part = 1 / (1 + beta * relu_x ** 2)
 
-        return linear_part + pos_part - neg_part
+        return pos_part - neg_part
 
 class AsymCauchy(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -86,7 +86,7 @@ class STAR(nn.Module):
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
         
-        self.activation = nn.SiLU()#LearnableAsymCauchy()
+        self.activation = LearnableAsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
