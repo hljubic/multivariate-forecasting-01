@@ -226,7 +226,8 @@ class Dataset_Custom(Dataset):
         df_raw.columns: ['date', ...(other features), target feature]
         '''
         cols = list(df_raw.columns)
-        cols.remove(self.target)
+        if self.target in cols:
+            cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]
         num_train = int(len(df_raw) * 0.7)
