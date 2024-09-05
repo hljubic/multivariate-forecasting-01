@@ -163,7 +163,9 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         #adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
+        #adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
+        adaptive_core, _ = self.adaptive_core_lstm(input.mean(dim=1, keepdim=True))  # (batch_size, 1, d_core)
+
         combined_mean = combined_mean + adaptive_core
 
         # Stohastičko uzorkovanje sa Gumbel-Softmax
