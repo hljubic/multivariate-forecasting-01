@@ -42,87 +42,6 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Tree-like Network Architecture with Temporal Embeddings and Dropout
-        """
-
-        # Pozicijska embeding komponenta
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-
-        # Prva grana stabla (koreni)
-        self.branch1 = nn.Linear(d_series, d_core)
-        self.branch2 = nn.Linear(d_series, d_core)
-
-        # Srednje grane stabla
-        self.mid_branch1 = nn.Linear(d_core, d_core // 2)
-        self.mid_branch2 = nn.Linear(d_core, d_core // 2)
-        self.mid_branch3 = nn.Linear(d_core, d_core // 2)
-        self.mid_branch4 = nn.Linear(d_core, d_core // 2)
-
-        # Gornje grane (listovi)
-        self.leaf1 = nn.Linear(d_core // 2, d_series)
-        self.leaf2 = nn.Linear(d_core // 2, d_series)
-        self.leaf3 = nn.Linear(d_core // 2, d_series)
-        self.leaf4 = nn.Linear(d_core // 2, d_series)
-
-        # Dropout slojevi
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-        self.dropout4 = nn.Dropout(dropout_rate)
-
-        # Aktivacija
-        self.activation = LACA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Primjena temporalnog embeddinga
-        input = self.positional_embedding(input)
-
-        # Prva grana stabla (grananje u dve grane)
-        branch1_out = self.activation(self.branch1(input))
-        branch2_out = self.activation(self.branch2(input))
-
-        # Dropout na prve grane
-        branch1_out = self.dropout1(branch1_out)
-        branch2_out = self.dropout1(branch2_out)
-
-        # Srednje grane stabla (grananje iz svake grane u dve podgrane)
-        mid_branch1_out = self.activation(self.mid_branch1(branch1_out))
-        mid_branch2_out = self.activation(self.mid_branch2(branch1_out))
-        mid_branch3_out = self.activation(self.mid_branch3(branch2_out))
-        mid_branch4_out = self.activation(self.mid_branch4(branch2_out))
-
-        # Dropout na srednje grane
-        mid_branch1_out = self.dropout2(mid_branch1_out)
-        mid_branch2_out = self.dropout2(mid_branch2_out)
-        mid_branch3_out = self.dropout2(mid_branch3_out)
-        mid_branch4_out = self.dropout2(mid_branch4_out)
-
-        # Gornje grane stabla (listovi)
-        leaf1_out = self.activation(self.leaf1(mid_branch1_out))
-        leaf2_out = self.activation(self.leaf2(mid_branch2_out))
-        leaf3_out = self.activation(self.leaf3(mid_branch3_out))
-        leaf4_out = self.activation(self.leaf4(mid_branch4_out))
-
-        # Dropout na listove
-        leaf1_out = self.dropout3(leaf1_out)
-        leaf2_out = self.dropout3(leaf2_out)
-        leaf3_out = self.dropout3(leaf3_out)
-        leaf4_out = self.dropout3(leaf4_out)
-
-        # Kombiniraj izlaze sa listova (kumulativno vraćanje informacija s listova)
-        output = (leaf1_out + leaf2_out + leaf3_out + leaf4_out) / 4
-
-        # Rezidualna konekcija s ulazom
-        output = output + input
-
-        return output, None
-
 class STAR2(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -152,6 +71,8 @@ class STAR2(nn.Module):
 
         # Apply temporal embedding
         input = self.positional_embedding(input)
+
+        return self.gen4(input)
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
