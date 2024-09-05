@@ -42,8 +42,13 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-import random
 
+from einops import rearrange, repeat
+import math
+
+# Funkcija za Cauchy CDF transformaciju
+def cauchy_cdf_transform(x):
+    return (1 / torch.pi) * torch.atan(x) + 0.5
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -75,6 +80,8 @@ class STAR(nn.Module):
         # Apply temporal embedding
         input = self.positional_embedding(input)
 
+        # Apply Cauchy CDF transform on each channel
+        input = cauchy_cdf_transform(input)
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
         combined_mean = self.dropout1(combined_mean)  # Apply dropout
@@ -86,16 +93,13 @@ class STAR(nn.Module):
 
         # Apply Gaussian filter
 
-        # Monte Carlo sampling during stochastic pooling
+        # Stochastic pooling
         if self.training:
             ratio = F.softmax(combined_mean, dim=1)
             ratio = ratio.permute(0, 2, 1)
             ratio = ratio.reshape(-1, channels)
-
-            # Monte Carlo sampling: uzorkujemo iz softmax distribucije
-            monte_carlo_samples = [random.choices(range(channels), weights=ratio[i]) for i in range(ratio.shape[0])]
-            indices = torch.tensor(monte_carlo_samples).view(batch_size, -1, 1).permute(0, 2, 1).to(combined_mean.device)
-
+            indices = torch.multinomial(ratio, 1)
+            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
             combined_mean = torch.gather(combined_mean, 1, indices)
             combined_mean = combined_mean.repeat(1, channels, 1)
         else:
