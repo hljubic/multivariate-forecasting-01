@@ -42,25 +42,6 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-class CloudBlock(nn.Module):
-    def __init__(self, d_series, d_core, num_layers=2, dropout_rate=0.5):
-        super(CloudBlock, self).__init__()
-        """
-        Cloud block that processes data before the rain layers
-        """
-        # Oblak je sastavljen od nekoliko linearnih slojeva koji transformišu podatke
-        self.layers = nn.ModuleList([nn.Linear(d_series, d_core) for _ in range(num_layers)])
-        self.activation = LACU()
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x):
-        out = x
-        for layer in self.layers:
-            out = self.activation(layer(out))
-            out = self.dropout(out)
-        return out
-
-
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -153,37 +134,11 @@ class Model(nn.Module):
         )
 
         # Decoder
-        self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
+        self.projection1 = nn.Linear(configs.d_model, configs.pred_len, bias=True)
+        # Decoder
+        self.projection2 = nn.Linear(configs.pred_len, configs.pred_len, bias=True)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
-        # Apply cumulative sum transformation
-        x_enc_cumsum = x_enc
-        # Normalization from Non-stationary Transformer
-        if self.use_norm:
-            means = x_enc_cumsum.mean(1, keepdim=True).detach()
-            x_enc_cumsum = x_enc_cumsum - means
-            stdev = torch.sqrt(torch.var(x_enc_cumsum, dim=1, keepdim=True, unbiased=False) + 1e-5)
-            x_enc_cumsum /= stdev
-
-        x_enc_cumsum = x_enc.cumsum(dim=1)
-
-        _, _, N = x_enc_cumsum.shape
-        enc_out = self.enc_embedding(x_enc_cumsum, x_mark_enc)
-        enc_out, attns = self.encoder(enc_out, attn_mask=None)
-        dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
-
-        dec_out = torch.diff(torch.cat([torch.zeros_like(dec_out[:, :1]), dec_out], dim=1), dim=1)
-
-        # De-Normalization from Non-stationary Transformer
-        if self.use_norm:
-            dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
-            dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
-
-        # Reverse cumulative sum transformation (restore to original values)
-
-        return dec_out
-
-    def forecas2t(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
         if self.use_norm:
             means = x_enc.mean(1, keepdim=True).detach()
@@ -194,7 +149,8 @@ class Model(nn.Module):
         _, _, N = x_enc.shape
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
-        dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
+        dec_out = nn.Dropout(0.1)(LACU(self.projection1(enc_out)))
+        dec_out = self.projection2(enc_out).permute(0, 2, 1)[:, :, :N]
 
         # De-Normalization from Non-stationary Transformer
         if self.use_norm:
