@@ -95,7 +95,6 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input)
-        adaptive_core = self.apply_gaussian_filter(adaptive_core, sigma=1)
         combined_mean = combined_mean + adaptive_core
 
         # Apply Gaussian filter
@@ -123,7 +122,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
+        output = combined_mean_cat + self.apply_gaussian_filter(input, sigma=1)
 
         return output, None
 
