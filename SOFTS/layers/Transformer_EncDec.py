@@ -1,9 +1,9 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-class LACA(nn.Module):
+class LACU(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LACA, self).__init__()
+        super(LACU, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -25,9 +25,9 @@ class LACA(nn.Module):
         return pos_part - neg_part
 
 
-class LACA2(nn.Module):
+class LACU2(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LACA, self).__init__()
+        super(LACU, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -56,7 +56,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  LACA() #F.relu if activation == "relu" else F.gelu
+        self.activation =  LACU() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(

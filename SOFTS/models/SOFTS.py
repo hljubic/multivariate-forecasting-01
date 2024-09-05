@@ -5,9 +5,9 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
-class LACA(nn.Module):
+class LACU(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LACA, self).__init__()
+        super(LACU, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -42,7 +42,56 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
+
 class STAR(nn.Module):
+    def __init__(self, d_series, d_core, num_links=5, dropout_rate=0.5, max_len=5000):
+        super(STAR, self).__init__()
+        """
+        Chain-like Network Architecture with Temporal Embeddings and Dropout
+        """
+
+        # Pozicijska embeding komponenta
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+
+        # Prva karika lanca
+        self.first_link = nn.Linear(d_series, d_core)
+
+        # Srednje karike lanca (dinamički generisane)
+        self.chain_links = nn.ModuleList([nn.Linear(d_core, d_core) for _ in range(num_links)])
+
+        # Poslednja karika lanca
+        self.last_link = nn.Linear(d_core, d_series)
+
+        # Dropout slojevi
+        self.dropout = nn.Dropout(dropout_rate)
+
+        # Aktivacija
+        self.activation = LACA()
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Primjena temporalnog embeddinga
+        input = self.positional_embedding(input)
+
+        # Prolazak kroz prvu kariku lanca
+        out = self.activation(self.first_link(input))
+        out = self.dropout(out)
+
+        # Prolazak kroz svaku srednju kariku lanca
+        for link in self.chain_links:
+            out = self.activation(link(out))
+            out = self.dropout(out)
+
+        # Prolazak kroz poslednju kariku lanca
+        out = self.activation(self.last_link(out))
+
+        # Dodajemo rezidualnu konekciju sa početnim ulazom
+        output = out + input
+
+        return output, None
+
+class STAR4(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -64,7 +113,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = LACA()
+        self.activation = LACU()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -72,7 +121,7 @@ class STAR(nn.Module):
         # Apply temporal embedding
         input = self.positional_embedding(input)
 
-        return self.activation(self.gen4(input)), None
+        return self.dropout1(self.activation(self.gen4(input))), None
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
