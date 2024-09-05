@@ -46,6 +46,87 @@ class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
+        Adaptive STAR with Temporal Embeddings and Dropout in Star Topology
+        """
+
+        # Pozicijska embeding komponenta
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+
+        # Pet grana (zračenja) kao dio zvijezde
+        self.branch1 = nn.Linear(d_series, d_core)
+        self.branch2 = nn.Linear(d_series, d_core)
+        self.branch3 = nn.Linear(d_series, d_core)
+        self.branch4 = nn.Linear(d_series, d_core)
+        self.branch5 = nn.Linear(d_series, d_core)
+
+        # Adaptivna jezgra (središte zvijezde)
+        self.center = nn.Linear(d_core * 5, d_core)
+
+        # Povratne grane prema izlazu
+        self.out1 = nn.Linear(d_core, d_series)
+        self.out2 = nn.Linear(d_core, d_series)
+        self.out3 = nn.Linear(d_core, d_series)
+        self.out4 = nn.Linear(d_core, d_series)
+        self.out5 = nn.Linear(d_core, d_series)
+
+        # Dropout slojevi
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        # Aktivacija
+        self.activation = LACA()
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Primjena temporalnog embeddinga
+        input = self.positional_embedding(input)
+
+        # Aktiviranje svake grane (zračenje zvijezde)
+        branch1_out = self.activation(self.branch1(input))
+        branch2_out = self.activation(self.branch2(input))
+        branch3_out = self.activation(self.branch3(input))
+        branch4_out = self.activation(self.branch4(input))
+        branch5_out = self.activation(self.branch5(input))
+
+        # Dropout na grane
+        branch1_out = self.dropout1(branch1_out)
+        branch2_out = self.dropout1(branch2_out)
+        branch3_out = self.dropout1(branch3_out)
+        branch4_out = self.dropout1(branch4_out)
+        branch5_out = self.dropout1(branch5_out)
+
+        # Spajanje grana u adaptivno središte zvijezde
+        combined = torch.cat([branch1_out, branch2_out, branch3_out, branch4_out, branch5_out], -1)
+        center_out = self.activation(self.center(combined))
+
+        # Dropout na središte
+        center_out = self.dropout2(center_out)
+
+        # Povratak prema vanjskim slojevima kroz izlazne grane
+        out1 = self.activation(self.out1(center_out))
+        out2 = self.activation(self.out2(center_out))
+        out3 = self.activation(self.out3(center_out))
+        out4 = self.activation(self.out4(center_out))
+        out5 = self.activation(self.out5(center_out))
+
+        # Kombiniraj izlaze iz svih grana
+        output = (out1 + out2 + out3 + out4 + out5) / 5
+
+        # Dropout na izlaz
+        output = self.dropout3(output)
+
+        # Rezidualna konekcija s ulazom
+        output = output + input
+
+        return output, None
+
+
+class STAR2(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+        super(STAR, self).__init__()
+        """
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
@@ -105,83 +186,6 @@ class STAR(nn.Module):
 
         # Dodajemo rezidualnu konekciju
         output = combined_mean_cat + input
-
-        return output, None
-
-class STAR44(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings and Dropout
-        """
-
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-
-        # Adaptive Core Formation
-        self.adaptive_core = nn.Linear(d_series, d_core)
-
-        self.adaptive_core = nn.Linear(d_core, d_core)
-
-        nn.Sequential(
-            nn.Linear(d_series, d_core),
-            LACA(),
-            nn.Linear(d_core, d_core)
-        )
-
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        self.temperature = 1.0
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LACA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply temporal embedding
-        input = self.positional_embedding(input)
-
-        # Set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout1(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # Adaptive Core Formation
-        #adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        combined_mean = combined_mean + adaptive_core
-
-        # stochastic pooling
-        if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-            combined_mean = torch.gather(combined_mean, 1, indices)
-            combined_mean = combined_mean.repeat(1, channels, 1)
-        else:
-            weight = F.softmax(combined_mean, dim=1)
-            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
-
-        combined_mean = self.dropout2(combined_mean)  # Apply dropout
-
-        # mlp fusion
-        # Rezidualna konekcija s ulaznim podacima
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Dodajemo rezidualnu konekciju
-        output = self.gen4(combined_mean_cat + input)
 
         return output, None
 
