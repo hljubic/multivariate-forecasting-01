@@ -81,7 +81,7 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        combined_mean = combined_mean + adaptive_core
+        combined_mean = combined_mean# + adaptive_core
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
