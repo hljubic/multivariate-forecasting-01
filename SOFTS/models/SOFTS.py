@@ -134,9 +134,7 @@ class Model(nn.Module):
         )
 
         # Decoder
-        self.projection1 = nn.Linear(configs.d_model, configs.pred_len, bias=True)
-        # Decoder
-        self.projection2 = nn.Linear(configs.pred_len, configs.pred_len, bias=True)
+        self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
@@ -148,9 +146,8 @@ class Model(nn.Module):
 
         _, _, N = x_enc.shape
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
-        enc_out, attns = LACU()(self.encoder(enc_out, attn_mask=None))
-        dec_out = self.projection1(enc_out)
-        dec_out = self.projection2(dec_out).permute(0, 2, 1)[:, :, :N]
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
+        dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
 
         # De-Normalization from Non-stationary Transformer
         if self.use_norm:
