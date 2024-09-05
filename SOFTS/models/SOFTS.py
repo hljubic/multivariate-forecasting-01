@@ -41,6 +41,10 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5):
         super(STAR, self).__init__()
@@ -54,12 +58,12 @@ class STAR(nn.Module):
         self.adaptive_core3 = nn.Linear(d_series, d_core // 4)
         self.adaptive_core4 = nn.Linear(d_series, d_core // 4)
 
-        # MLP to combine the cores non-linearly
-        self.mlp = nn.Sequential(
-            nn.Linear(d_core, d_core),
-            nn.ReLU(),  # or use LASA activation here if needed
-            nn.Linear(d_core, d_core)
-        )
+        # Gating mechanism to control contribution of each core
+        self.gate1 = nn.Sigmoid()  # Gate for adaptive_core1
+        self.gate2 = nn.Sigmoid()  # Gate for adaptive_core2
+        self.gate3 = nn.Sigmoid()  # Gate for adaptive_core3
+        self.gate4 = nn.Sigmoid()  # Gate for adaptive_core3
+        self.gate_weights = nn.Linear(d_series, 4)  # Generate gating values from input
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -69,7 +73,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = nn.ReLU()  # Replace with LASA or other custom activation if required
+        self.activation = nn.ReLU()  # Replace with LASA or custom activation if needed
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -85,14 +89,21 @@ class STAR(nn.Module):
         adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
         adaptive_core4 = self.adaptive_core4(input.mean(dim=1, keepdim=True))
 
-        # Concatenate the adaptive cores along the last dimension (features)
-        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3, adaptive_core4], dim=2)
+        # Generate gating values from the input
+        gate_values = self.gate_weights(input.mean(dim=1, keepdim=True))  # [B, 1, 3]
+        gate1_value, gate2_value, gate3_value = gate_values[:, :, 0], gate_values[:, :, 1], gate_values[:, :, 2], gate_values[:, :, 3]
 
-        # Pass the concatenated cores through the MLP to non-linearly combine them
-        enriched_core = self.mlp(adaptive_core_concat)
+        # Apply gating mechanisms to control the contribution of each core
+        gated_core1 = adaptive_core1 * self.gate1(gate1_value).unsqueeze(2)
+        gated_core2 = adaptive_core2 * self.gate2(gate2_value).unsqueeze(2)
+        gated_core3 = adaptive_core3 * self.gate3(gate3_value).unsqueeze(2)
+        gated_core4 = adaptive_core4 * self.gate3(gate4_value).unsqueeze(2)
 
-        # Add the non-linearly combined core to the combined_mean
-        combined_mean = combined_mean + enriched_core
+        # Combine the gated cores
+        combined_gated_cores = gated_core1 + gated_core2 + gated_core3 + gated_core4
+
+        # Add the gated cores to the combined_mean
+        combined_mean = combined_mean + combined_gated_cores
 
         # Concatenate the input and the combined result for the next layer
         combined_mean_cat = torch.cat([input, combined_mean], dim=2)
@@ -105,6 +116,7 @@ class STAR(nn.Module):
         output = combined_mean_cat + input
 
         return output, None
+
 class STAR44(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
