@@ -110,10 +110,10 @@ class STAR(nn.Module):
         combined_mean_cat = torch.cat([input, combined_mean], -1)
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat + input)
+        combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat
+        output = self.gen4(combined_mean_cat + input)
 
         return output, None
 
