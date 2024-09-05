@@ -48,6 +48,8 @@ class STAR(nn.Module):
         """
         STar Aggregate-Redistribute Module with Channel Independence
         """
+        self.d_series = d_series
+        self.d_core = d_core
         # Definišemo nezavisne linearne transformacije za svaki kanal
         self.gen1 = nn.Conv1d(in_channels=d_series, out_channels=d_series, kernel_size=1)
         self.gen2 = nn.Conv1d(in_channels=d_series, out_channels=d_core, kernel_size=1)
@@ -67,8 +69,8 @@ class STAR(nn.Module):
         # Stochastic pooling
         if self.training:
             ratio = F.softmax(combined_mean, dim=2)  # Softmax po seriji, ne kanalima
-            indices = torch.multinomial(ratio.reshape(batch_size, d_core, -1), 1)  # Uzorkovanje nezavisno po kanalima
-            combined_mean = torch.gather(combined_mean, 2, indices.repeat(1, d_core, 1))
+            indices = torch.multinomial(ratio.reshape(batch_size, self.d_core, -1), 1)  # Uzorkovanje nezavisno po kanalima
+            combined_mean = torch.gather(combined_mean, 2, indices.repeat(1, self.d_core, 1))
         else:
             weight = F.softmax(combined_mean, dim=2)
             combined_mean = torch.sum(combined_mean * weight, dim=2, keepdim=True).repeat(1, 1, channels)
