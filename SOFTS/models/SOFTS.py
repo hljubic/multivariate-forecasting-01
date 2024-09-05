@@ -42,49 +42,83 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        STar Aggregate-Redistribute Module with Channel Independence
+        Adaptive STAR with Temporal Embeddings and Dropout
         """
-        self.d_series = d_series
-        self.d_core = d_core
-        # Definišemo nezavisne linearne transformacije za svaki kanal
-        self.gen1 = nn.Conv1d(in_channels=d_series, out_channels=d_series, kernel_size=1)
-        self.gen2 = nn.Conv1d(in_channels=d_series, out_channels=d_core, kernel_size=1)
-        self.gen3 = nn.Conv1d(in_channels=d_series + d_core, out_channels=d_series, kernel_size=1)
-        self.gen4 = nn.Conv1d(in_channels=d_series, out_channels=d_series, kernel_size=1)
+
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+        self.gen1 = nn.Linear(d_series, d_series)
+        self.gen2 = nn.Linear(d_series, d_core)
+
+        # Adaptive Core Formation
+        self.adaptive_core = nn.Linear(d_series, d_core)
+
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
+
+        # Dropout layers
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.activation = LACU()
+
+        # Attention mechanism (replaces stochastic pooling)
+        self.query_layer = nn.Linear(d_core, d_core)
+        self.key_layer = nn.Linear(d_core, d_core)
+        self.value_layer = nn.Linear(d_core, d_core)
+        self.softmax = nn.Softmax(dim=-1)
+        self.scale = 1 / (d_core ** 0.5)  # Scaled dot-product attention normalization
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
-        # Transponujemo ulaz da bi odgovarao Conv1d dimenzijama (batch_size, d_series, channels)
-        input = input.permute(0, 2, 1)
+        # Apply temporal embedding
+        input = self.positional_embedding(input)
 
-        # Set FFN - primenjujemo konvolucije nezavisno po svakom kanalu
-        combined_mean = F.gelu(self.gen1(input))
+        # First Feed-forward step
+        combined_mean = self.activation(self.gen1(input))
+        combined_mean = self.dropout1(combined_mean)  # Apply dropout
         combined_mean = self.gen2(combined_mean)
 
-        # Stochastic pooling
-        if self.training:
-            ratio = F.softmax(combined_mean, dim=2)  # Softmax po seriji, ne kanalima
-            indices = torch.cat([torch.multinomial(ratio[:, i, :], 1) for i in range(self.d_core)], dim=1)
-            combined_mean = torch.gather(combined_mean, 2, indices.repeat(1, self.d_core, 1))
-        else:
-            weight = F.softmax(combined_mean, dim=2)
-            combined_mean = torch.sum(combined_mean * weight, dim=2, keepdim=True).repeat(1, 1, channels)
+        # Adaptive Core Formation
+        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
+        combined_mean = combined_mean + adaptive_core
 
-        # MLP fusion - concatenacija ulaza i obrađenih podataka po serijama
-        combined_mean_cat = torch.cat([input, combined_mean], dim=1)
-        combined_mean_cat = F.gelu(self.gen3(combined_mean_cat))
+        # Attention mechanism
+        queries = self.query_layer(combined_mean)
+        keys = self.key_layer(combined_mean)
+        values = self.value_layer(combined_mean)
+
+        # Scaled dot-product attention
+        attention_scores = torch.matmul(queries, keys.transpose(-2, -1)) * self.scale
+        attention_weights = self.softmax(attention_scores)
+
+        # Weighted sum of values (similar to pooling but with attention)
+        combined_mean = torch.matmul(attention_weights, values)
+
+        combined_mean = self.dropout2(combined_mean)  # Apply dropout
+
+        # MLP fusion
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
 
-        # Vraćamo dimenzije nazad na (batch_size, channels, d_series)
-        output = combined_mean_cat.permute(0, 2, 1)
+        # Add residual connection
+        output = combined_mean_cat + input
 
         return output, None
-class STAR44(nn.Module):
+
+
+class STAR4(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
