@@ -40,89 +40,7 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings and Dropout
-        """
-
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-
-        # Multiple Convolution Layers for Adaptive Core
-        self.adaptive_core_conv1 = nn.Conv1d(in_channels=d_series, out_channels=d_core, kernel_size=3, padding=1)
-        self.adaptive_core_conv2 = nn.Conv1d(in_channels=d_core, out_channels=d_core, kernel_size=3, padding=1)
-        self.batch_norm1 = nn.BatchNorm1d(d_core)  # Normalization layer
-        self.relu = nn.ReLU()  # Activation layer
-
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LACA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply temporal embedding
-        input = self.positional_embedding(input)
-
-        # Set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout1(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # Adaptive Core Formation using multiple convolution layers
-        adaptive_core = input.permute(0, 2, 1)  # Change to (batch_size, d_series, sequence_length)
-
-        # First convolutional layer + activation + normalization
-        adaptive_core = self.adaptive_core_conv1(adaptive_core)
-        adaptive_core = self.batch_norm1(adaptive_core)
-        adaptive_core = self.relu(adaptive_core)
-
-        # Second convolutional layer
-        adaptive_core = self.adaptive_core_conv2(adaptive_core)
-
-        # Return to (batch_size, sequence_length, d_core)
-        adaptive_core = adaptive_core.permute(0, 2, 1)
-
-        combined_mean = combined_mean + adaptive_core
-
-        # Stochastic pooling
-        if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-            combined_mean = torch.gather(combined_mean, 1, indices)
-            combined_mean = combined_mean.repeat(1, channels, 1)
-        else:
-            weight = F.softmax(combined_mean, dim=1)
-            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
-
-        combined_mean = self.dropout2(combined_mean)  # Apply dropout
-
-        # mlp fusion
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Add residual connection
-        output = combined_mean_cat + input
-
-        return output, None
-
-
-class STAR3(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -144,7 +62,7 @@ class STAR3(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = LACA()
+        self.activation = F.gelu
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
