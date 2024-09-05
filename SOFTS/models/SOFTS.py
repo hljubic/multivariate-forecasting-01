@@ -41,7 +41,6 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -50,7 +49,7 @@ class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings and Dropout
+        Adaptive STAR with Temporal Embeddings, Dropout, and Global Attention
         """
 
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
@@ -70,12 +69,12 @@ class STAR(nn.Module):
 
         self.activation = LACU()
 
-        # Attention mechanism (replaces stochastic pooling)
-        self.query_layer = nn.Linear(d_core, d_core)
-        self.key_layer = nn.Linear(d_core, d_core)
-        self.value_layer = nn.Linear(d_core, d_core)
+        # Global attention mechanism
+        self.query = nn.Linear(d_core, d_core)
+        self.key = nn.Linear(d_core, d_core)
+        self.value = nn.Linear(d_core, d_core)
+        self.scale = 1 / (d_core ** 0.5)
         self.softmax = nn.Softmax(dim=-1)
-        self.scale = 1 / (d_core ** 0.5)  # Scaled dot-product attention normalization
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -92,16 +91,16 @@ class STAR(nn.Module):
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
-        # Attention mechanism
-        queries = self.query_layer(combined_mean)
-        keys = self.key_layer(combined_mean)
-        values = self.value_layer(combined_mean)
+        # Global Attention mechanism (replaces stochastic pooling)
+        queries = self.query(combined_mean)
+        keys = self.key(combined_mean)
+        values = self.value(combined_mean)
 
-        # Scaled dot-product attention
+        # Scaled dot-product attention across all channels and time steps
         attention_scores = torch.matmul(queries, keys.transpose(-2, -1)) * self.scale
         attention_weights = self.softmax(attention_scores)
 
-        # Weighted sum of values (similar to pooling but with attention)
+        # Apply attention weights to values to get the final weighted representation
         combined_mean = torch.matmul(attention_weights, values)
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
@@ -118,7 +117,7 @@ class STAR(nn.Module):
         return output, None
 
 
-class STAR4(nn.Module):
+class STAR1(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
