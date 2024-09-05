@@ -84,7 +84,7 @@ class STAR(nn.Module):
         adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
 
         # Calculating the arithmetic mean of the three adaptive cores
-        adaptive_core_mean = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3])
+        adaptive_core_mean = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3], dim=1)
 
         combined_mean = combined_mean + adaptive_core_mean
 
