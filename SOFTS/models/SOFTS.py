@@ -50,7 +50,7 @@ class CloudBlock(nn.Module):
         """
         # Oblak je sastavljen od nekoliko linearnih slojeva koji transformišu podatke
         self.layers = nn.ModuleList([nn.Linear(d_series, d_core) for _ in range(num_layers)])
-        self.activation = LACA()
+        self.activation = LACU()
         self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, x):
