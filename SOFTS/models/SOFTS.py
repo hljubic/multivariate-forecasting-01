@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
-class LACA(nn.Module):
+class LAC2A(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LACA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
@@ -28,7 +28,7 @@ class LACA(nn.Module):
         # Konačni rezultat
         return pos_part - neg_part
 
-class PositionalEmbedding(nn.Module):
+class Position2alEmbedding(nn.Module):
     def __init__(self, d_series, max_len=5000):
         super(PositionalEmbedding, self).__init__()
         self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
@@ -41,6 +41,34 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
+
+class LACA(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(LACA, self).__init__()
+        self.alpha = nn.Parameter(torch.tensor(alpha))
+        self.beta = nn.Parameter(torch.tensor(beta))
+
+    def forward(self, x):
+        relu_x = torch.clamp(x, min=0)  # Zamena za torch.relu(x)
+        relu_neg_x = torch.clamp(-x, min=0)  # Zamena za torch.relu(-x)
+        relu_neg_x_sq = relu_neg_x * relu_neg_x
+        relu_x_sq = relu_x * relu_x
+        pos_part = 1 / (1 + self.alpha * relu_neg_x_sq)
+        neg_part = 1 / (1 + self.beta * relu_x_sq)
+        return pos_part - neg_part
+
+class PositionalEmbedding(nn.Module):
+    def __init__(self, d_series, max_len=5000):
+        super(PositionalEmbedding, self).__init__()
+        self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
+        position = torch.arange(0, max_len).unsqueeze(1).float()
+        div_term = torch.exp(torch.arange(0, d_series, 2).float() * -(torch.log(torch.tensor(10000.0)) / d_series))
+        self.position_embedding[:, :, 0::2] = torch.sin(position * div_term)
+        self.position_embedding[:, :, 1::2] = torch.cos(position * div_term)
+
+    def forward(self, x):
+        x = x + self.position_embedding[:, :x.size(1)]
+        return x
 
 
 class STAR(nn.Module):
