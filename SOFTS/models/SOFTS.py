@@ -250,7 +250,7 @@ class Model(nn.Module):
             stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
             x_enc /= stdev
 
-        x_enc = self.normalize_frequencies(x_enc, kernel_size=3, sigma=1.5)
+        x_enc = self.normalize_frequencies(x_enc, target_frequency=1.5)
 
         _, _, N = x_enc.shape
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
