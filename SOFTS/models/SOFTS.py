@@ -6,9 +6,9 @@ from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
 
-class LASA(nn.Module):
+class LACA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LASA, self).__init__()
+        super(LACA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -52,7 +52,8 @@ class STAR(nn.Module):
         self.gen2 = nn.Linear(d_series, d_core)
 
         # Adaptive Core Formation
-        self.adaptive_core = nn.Linear(d_series, d_core)
+        #self.adaptive_core = nn.Linear(d_series, d_core)
+        self.adaptive_core = nn.Conv1d(in_channels=d_series, out_channels=d_core, kernel_size=1)
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -62,7 +63,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = LASA()
+        self.activation = LACA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -76,7 +77,9 @@ class STAR(nn.Module):
         combined_mean = self.gen2(combined_mean)
 
         # Adaptive Core Formation
-        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
+        #adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
+        adaptive_core_input = input.mean(dim=1, keepdim=True).permute(0, 2, 1)
+        adaptive_core = self.adaptive_core(adaptive_core_input)
         combined_mean = combined_mean + adaptive_core
 
         # Stochastic pooling
@@ -114,8 +117,7 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         # Embedding
-        self.enc_embedding = PositionalEmbedding(configs.d_core, 5000)
-        #self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
+        self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
         self.use_norm = configs.use_norm
         # Encoder
         self.encoder = Encoder(
@@ -133,7 +135,6 @@ class Model(nn.Module):
         # Decoder
         self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
 
-
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
         if self.use_norm:
@@ -143,7 +144,7 @@ class Model(nn.Module):
             x_enc /= stdev
 
         _, _, N = x_enc.shape
-        enc_out = self.enc_embedding(x_enc)#, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
 

@@ -3,9 +3,9 @@ import torch.nn.functional as F
 import torch
 
 
-class LASA(nn.Module):
+class LACA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LASA, self).__init__()
+        super(LACA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -34,7 +34,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  LASA() #F.relu if activation == "relu" else F.gelu
+        self.activation =  LACA() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(
