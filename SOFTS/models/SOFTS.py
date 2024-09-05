@@ -5,29 +5,6 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from einops import rearrange, repeat
-
-import math
-
-
-class DSW_embedding(nn.Module):
-    def __init__(self, seg_len, d_model):
-        super(DSW_embedding, self).__init__()
-        self.seg_len = seg_len
-
-        self.linear = nn.Linear(seg_len, d_model)
-
-    def forward(self, x):
-        batch, ts_len, ts_dim = x.shape
-
-        x_segment = rearrange(x, 'b (seg_num seg_len) d -> (b d seg_num) seg_len', seg_len=self.seg_len)
-        x_embed = self.linear(x_segment)
-        x_embed = rearrange(x_embed, '(b d seg_num) d_model -> b d seg_num d_model', b=batch, d=ts_dim)
-
-        return x_embed
 
 class LASA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -50,7 +27,7 @@ class LASA(nn.Module):
 
         return pos_part - neg_part
 
-class TemporalEmbedding(nn.Module):
+class XY(nn.Module):
     def __init__(self, d_series, max_len=5000):
         super(TemporalEmbedding, self).__init__()
         self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
@@ -189,8 +166,7 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         # Embedding
-        self.enc_embedding = DSW_embedding(configs.seq_len, configs.d_model)
-        #self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
+        self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
         self.use_norm = configs.use_norm
         # Encoder
         self.encoder = Encoder(
@@ -217,7 +193,7 @@ class Model(nn.Module):
             x_enc /= stdev
 
         _, _, N = x_enc.shape
-        enc_out = self.enc_embedding(x_enc)#, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
 
