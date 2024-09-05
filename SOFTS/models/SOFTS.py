@@ -68,7 +68,7 @@ class STAR(nn.Module):
         """
 
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.dsw_embedding = DSW_embedding(seg_len, d_model)
+        self.dsw_embedding = DSW_embedding(d_series, d_series)
 
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
