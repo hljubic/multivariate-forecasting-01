@@ -95,10 +95,10 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input)
+        adaptive_core = self.apply_gaussian_filter(adaptive_core, sigma=1)
         combined_mean = combined_mean + adaptive_core
 
         # Apply Gaussian filter
-        combined_mean = self.apply_gaussian_filter(combined_mean, sigma=1)
 
         # Stochastic pooling
         if self.training:
