@@ -40,7 +40,6 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -62,7 +61,7 @@ class STAR(nn.Module):
         self.gate1 = nn.Sigmoid()  # Gate for adaptive_core1
         self.gate2 = nn.Sigmoid()  # Gate for adaptive_core2
         self.gate3 = nn.Sigmoid()  # Gate for adaptive_core3
-        self.gate4 = nn.Sigmoid()  # Gate for adaptive_core3
+        self.gate4 = nn.Sigmoid()  # Gate for adaptive_core4
         self.gate_weights = nn.Linear(d_series, 4)  # Generate gating values from input
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
@@ -90,14 +89,14 @@ class STAR(nn.Module):
         adaptive_core4 = self.adaptive_core4(input.mean(dim=1, keepdim=True))
 
         # Generate gating values from the input
-        gate_values = self.gate_weights(input.mean(dim=1, keepdim=True))  # [B, 1, 3]
+        gate_values = self.gate_weights(input.mean(dim=1, keepdim=True))  # [B, 1, 4]
         gate1_value, gate2_value, gate3_value, gate4_value = gate_values[:, :, 0], gate_values[:, :, 1], gate_values[:, :, 2], gate_values[:, :, 3]
 
         # Apply gating mechanisms to control the contribution of each core
         gated_core1 = adaptive_core1 * self.gate1(gate1_value).unsqueeze(2)
         gated_core2 = adaptive_core2 * self.gate2(gate2_value).unsqueeze(2)
         gated_core3 = adaptive_core3 * self.gate3(gate3_value).unsqueeze(2)
-        gated_core4 = adaptive_core4 * self.gate3(gate4_value).unsqueeze(2)
+        gated_core4 = adaptive_core4 * self.gate4(gate4_value).unsqueeze(2)
 
         # Combine the gated cores
         combined_gated_cores = gated_core1 + gated_core2 + gated_core3 + gated_core4
