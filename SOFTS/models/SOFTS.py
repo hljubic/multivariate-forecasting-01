@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
-class LAC2A(nn.Module):
+class LACA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LACA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
@@ -26,35 +26,6 @@ class LAC2A(nn.Module):
         neg_part = 1 / (1 + self.beta * relu_x_sq)
 
         # Konačni rezultat
-        return pos_part - neg_part
-
-class Position2alEmbedding(nn.Module):
-    def __init__(self, d_series, max_len=5000):
-        super(PositionalEmbedding, self).__init__()
-        self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
-        position = torch.arange(0, max_len).unsqueeze(1).float()
-        div_term = torch.exp(torch.arange(0, d_series, 2).float() * -(torch.log(torch.tensor(10000.0)) / d_series))
-        self.position_embedding[:, :, 0::2] = torch.sin(position * div_term)
-        self.position_embedding[:, :, 1::2] = torch.cos(position * div_term)
-
-    def forward(self, x):
-        x = x + self.position_embedding[:, :x.size(1)]
-        return x
-
-
-class LACA(nn.Module):
-    def __init__(self, alpha=1.0, beta=1.0):
-        super(LACA, self).__init__()
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-        self.beta = nn.Parameter(torch.tensor(beta))
-
-    def forward(self, x):
-        relu_x = torch.clamp(x, min=0)  # Zamena za torch.relu(x)
-        relu_neg_x = torch.clamp(-x, min=0)  # Zamena za torch.relu(-x)
-        relu_neg_x_sq = relu_neg_x * relu_neg_x
-        relu_x_sq = relu_x * relu_x
-        pos_part = 1 / (1 + self.alpha * relu_neg_x_sq)
-        neg_part = 1 / (1 + self.beta * relu_x_sq)
         return pos_part - neg_part
 
 class PositionalEmbedding(nn.Module):
@@ -93,9 +64,9 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        # Normalizacijski slojevi (BatchNorm)
-        self.norm1 = nn.BatchNorm1d(d_core)
-        self.norm2 = nn.BatchNorm1d(d_series)
+        # Normalizacijski slojevi (LayerNorm umesto BatchNorm)
+        self.norm1 = nn.LayerNorm(d_core)
+        self.norm2 = nn.LayerNorm(d_series)
 
         # Gumbel temperature
         self.temperature = temperature
@@ -131,7 +102,7 @@ class STAR(nn.Module):
             weight = F.softmax(combined_mean, dim=1)
             combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
 
-        combined_mean = self.norm1(combined_mean)  # Primena normalizacije
+        combined_mean = self.norm1(combined_mean)  # Primena normalizacije (LayerNorm)
         combined_mean = self.dropout2(combined_mean)
 
         # MLP fuzija sa rezidualnom konekcijom
@@ -144,8 +115,6 @@ class STAR(nn.Module):
         output = self.norm2(combined_mean_cat + input)
 
         return output, None
-
-
 class STAR33(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
