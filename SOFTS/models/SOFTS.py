@@ -93,7 +93,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
+        output = combined_mean_cat# + input
 
         return output, None
 
