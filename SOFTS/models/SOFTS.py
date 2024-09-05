@@ -69,7 +69,7 @@ class STAR(nn.Module):
         # Stochastic pooling
         if self.training:
             ratio = F.softmax(combined_mean, dim=2)  # Softmax po seriji, ne kanalima
-            indices = torch.multinomial(ratio.reshape(batch_size, self.d_core, -1), 1)  # Uzorkovanje nezavisno po kanalima
+            indices = torch.cat([torch.multinomial(ratio[:, i, :], 1) for i in range(self.d_core)], dim=1)
             combined_mean = torch.gather(combined_mean, 2, indices.repeat(1, self.d_core, 1))
         else:
             weight = F.softmax(combined_mean, dim=2)
