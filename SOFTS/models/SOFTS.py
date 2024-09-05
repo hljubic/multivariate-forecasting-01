@@ -64,17 +64,8 @@ class STAR(nn.Module):
 
         self.activation = LASA()
 
-        self.use_norm = True
-
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
-
-        if self.use_norm:
-            x_enc = input
-            means = x_enc.mean(1, keepdim=True).detach()
-            x_enc = x_enc - means
-            stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
-            input /= stdev
 
         # Apply temporal embedding
         input = self.positional_embedding(input)
@@ -113,9 +104,6 @@ class STAR(nn.Module):
         # Dodajemo rezidualnu konekciju
         output = combined_mean_cat + input
 
-        if self.use_norm:
-            output = output * (stdev[:, 0, :].unsqueeze(1).repeat(1, channels, 1))
-            output = output + (means[:, 0, :].unsqueeze(1).repeat(1, channels, 1))
         return output, None
 
 
@@ -126,7 +114,8 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         # Embedding
-        self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
+        self.enc_embedding = PositionalEmbedding(configs.seq_len, 5000)
+        #self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
         self.use_norm = configs.use_norm
         # Encoder
         self.encoder = Encoder(
@@ -144,6 +133,7 @@ class Model(nn.Module):
         # Decoder
         self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
 
+
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
         if self.use_norm:
@@ -153,7 +143,7 @@ class Model(nn.Module):
             x_enc /= stdev
 
         _, _, N = x_enc.shape
-        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc)#, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
 
