@@ -43,7 +43,7 @@ class PositionalEmbedding(nn.Module):
 
 
 
-class STAR(nn.Module):
+class STAR44(nn.Module):
     def __init__(self, d_series, d_core, num_links=5, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -91,7 +91,7 @@ class STAR(nn.Module):
 
         return output, None
 
-class STAR4(nn.Module):
+class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -121,7 +121,7 @@ class STAR4(nn.Module):
         # Apply temporal embedding
         input = self.positional_embedding(input)
 
-        return self.dropout1(self.activation(self.gen4(input))), None
+        return self.gen4(self.dropout1(self.activation(self.gen4(input)))) + input, None
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
