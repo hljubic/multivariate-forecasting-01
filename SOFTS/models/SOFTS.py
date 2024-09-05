@@ -87,8 +87,8 @@ class STAR(nn.Module):
 
         # mlp fusion
         # Rezidualna konekcija s ulaznim podacima
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        #combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
 
