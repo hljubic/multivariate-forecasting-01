@@ -43,13 +43,16 @@ class PositionalEmbedding(nn.Module):
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import math
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, sigma=1.0):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings and Dropout.
-        This version handles separate trend and difference components.
+        Adaptive STAR with Temporal Embeddings, Dropout, and Gaussian Smoothing for differences.
         """
 
         # Positional embedding for trend and differences
@@ -64,6 +67,9 @@ class STAR(nn.Module):
         self.diff_gen1 = nn.Linear(d_series, d_series)
         self.diff_gen2 = nn.Linear(d_series, d_core)
         self.adaptive_core_diff = nn.Linear(d_series, d_core)
+
+        # Gaussian filter for smoothing diff_out
+        self.gaussian_filter = self.create_gaussian_filter(sigma, kernel_size=5)
 
         # Fusion layers
         self.gen3 = nn.Linear(d_series + d_core, d_series)
@@ -99,6 +105,11 @@ class STAR(nn.Module):
         # Adaptive Core for differences
         adaptive_core_diff = self.adaptive_core_diff(input.mean(dim=1, keepdim=True))
         diff_out = diff_out + adaptive_core_diff
+
+        # Apply Gaussian Smoothing to diff_out
+        diff_out = diff_out.permute(0, 2, 1)  # Change shape for Conv1d (batch_size, channels, sequence_length)
+        diff_out = self.gaussian_filter(diff_out)
+        diff_out = diff_out.permute(0, 2, 1)  # Return to original shape
 
         # Stochastic pooling for trend and diff (if training)
         if self.training:
@@ -138,6 +149,17 @@ class STAR(nn.Module):
         weighted_sum = torch.sum(combined_mean * weight, dim=1, keepdim=True)
         return weighted_sum.repeat(1, channels, 1)
 
+    def create_gaussian_filter(self, sigma, kernel_size):
+        # Create a Gaussian kernel
+        kernel = torch.tensor([math.exp(-(x - kernel_size // 2) ** 2 / (2 * sigma ** 2)) for x in range(kernel_size)])
+        kernel = kernel / kernel.sum()  # Normalize kernel
+
+        # Reshape to 1D convolutional weight
+        kernel = kernel.view(1, 1, -1)  # Shape: (out_channels, in_channels, kernel_size)
+        gaussian_filter = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=kernel_size // 2, bias=False)
+        gaussian_filter.weight.data = kernel
+        gaussian_filter.weight.requires_grad = False  # Kernel is not trainable
+        return gaussian_filter
 
 
 class STAR2(nn.Module):
