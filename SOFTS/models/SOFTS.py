@@ -70,7 +70,7 @@ class STAR(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        #input = self.positional_embedding(input)
+        input = self.positional_embedding(input)
 
         #return self.gen4(self.dropout1(self.activation(self.gen4(input)))) + input, None
 
@@ -80,8 +80,21 @@ class STAR(nn.Module):
         combined_mean = self.gen2(combined_mean)
 
         # Adaptive Core Formation
-        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
+        adaptive_core = self.adaptive_core(input)
         combined_mean = combined_mean + adaptive_core
+
+        # Stochastic pooling
+        if self.training:
+            ratio = F.softmax(combined_mean, dim=1)
+            ratio = ratio.permute(0, 2, 1)
+            ratio = ratio.reshape(-1, channels)
+            indices = torch.multinomial(ratio, 1)
+            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
+            combined_mean = torch.gather(combined_mean, 1, indices)
+            combined_mean = combined_mean.repeat(1, channels, 1)
+        else:
+            weight = F.softmax(combined_mean, dim=1)
+            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
@@ -93,7 +106,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat# + input
+        output = combined_mean_cat + input
 
         return output, None
 
