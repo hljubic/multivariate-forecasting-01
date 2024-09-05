@@ -90,7 +90,7 @@ class STAR(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        input = self.positional_embedding(input)
+        #input = self.positional_embedding(input)
         # Apply DSW embedding
         input = self.dsw_embedding(input)
 
