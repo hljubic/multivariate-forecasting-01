@@ -70,7 +70,7 @@ class STAR(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        input = self.positional_embedding(input)
+        #input = self.positional_embedding(input)
 
         #return self.gen4(self.dropout1(self.activation(self.gen4(input)))) + input, None
 
@@ -81,7 +81,7 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        combined_mean = combined_mean# + adaptive_core
+        combined_mean = combined_mean + adaptive_core
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
@@ -93,7 +93,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat# + input
+        output = combined_mean_cat + input
 
         return output, None
 
