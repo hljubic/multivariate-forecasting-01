@@ -41,17 +41,13 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings, Dropout, and Global Attention
+        STAR model with Sparse Attention
         """
-
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
@@ -69,7 +65,7 @@ class STAR(nn.Module):
 
         self.activation = LACU()
 
-        # Global attention mechanism
+        # Sparse Attention mechanism
         self.query = nn.Linear(d_core, d_core)
         self.key = nn.Linear(d_core, d_core)
         self.value = nn.Linear(d_core, d_core)
@@ -91,16 +87,23 @@ class STAR(nn.Module):
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
-        # Global Attention mechanism (replaces stochastic pooling)
+        # Sparse Attention (limit attention to nearby time steps)
         queries = self.query(combined_mean)
         keys = self.key(combined_mean)
         values = self.value(combined_mean)
 
-        # Scaled dot-product attention across all channels and time steps
+        # Calculate sparse attention scores, considering only nearby time steps
         attention_scores = torch.matmul(queries, keys.transpose(-2, -1)) * self.scale
+
+        # Apply mask for sparse attention (e.g., only consider neighboring time steps)
+        mask = torch.triu(torch.ones(d_series, d_series), diagonal=2).bool()  # Example mask for sparse attention
+        attention_scores = attention_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0).to(attention_scores.device),
+                                                        float('-inf'))
+
+        # Softmax normalization
         attention_weights = self.softmax(attention_scores)
 
-        # Apply attention weights to values to get the final weighted representation
+        # Apply attention weights to values
         combined_mean = torch.matmul(attention_weights, values)
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
@@ -115,7 +118,6 @@ class STAR(nn.Module):
         output = combined_mean_cat + input
 
         return output, None
-
 
 class STAR1(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
