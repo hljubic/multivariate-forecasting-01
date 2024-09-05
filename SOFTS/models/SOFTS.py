@@ -54,9 +54,10 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         # Svaka mreža izlazi na d_core // 3
-        self.adaptive_core1 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core2 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core3 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core1 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core2 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core3 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core4 = nn.Linear(d_series, d_core // 4)
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -80,12 +81,14 @@ class STAR(nn.Module):
         combined_mean = self.gen2(combined_mean)
 
         # Adaptive Core Formation
+        # Adaptive Core Formation
         adaptive_core1 = self.adaptive_core1(input.mean(dim=1, keepdim=True))
         adaptive_core2 = self.adaptive_core2(input.mean(dim=1, keepdim=True))
         adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
+        adaptive_core4 = self.adaptive_core4(input.mean(dim=1, keepdim=True))
 
-        # Concatenate the three outputs to form a vector of size d_core
-        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3], dim=-1)
+        # Concatenate the four outputs to form a vector of size d_core
+        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3, adaptive_core4], dim=-1)
 
         combined_mean = combined_mean + adaptive_core_concat
 
