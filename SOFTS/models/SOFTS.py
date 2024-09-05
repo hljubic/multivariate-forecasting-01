@@ -61,7 +61,7 @@ class CloudBlock(nn.Module):
         return out
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, num_layers=5, dropout_rate=0.5, max_len=5000):
+    def __init__(self, d_series, d_core, num_layers=5, num_cloud_layers=3, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
         Rain-like Network Architecture with Temporal Embeddings and Dropout
