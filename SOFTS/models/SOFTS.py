@@ -43,9 +43,6 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-
-from scipy.ndimage import gaussian_filter
-
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -71,17 +68,6 @@ class STAR(nn.Module):
         self.activation = LACU()
 
 
-    def apply_gaussian_filter(self, input, sigma=1):
-        """
-        Apply a Gaussian filter to smooth the input.
-        :param input: Tensor to apply the filter on.
-        :param sigma: Standard deviation for Gaussian kernel.
-        :return: Smoothed tensor.
-        """
-        input_np = input.detach().cpu().numpy()
-        filtered_np = gaussian_filter(input_np, sigma=sigma)
-        return torch.from_numpy(filtered_np).to(input.device)
-
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
@@ -99,13 +85,16 @@ class STAR(nn.Module):
 
         # Apply Gaussian filter
 
-        # Stochastic pooling
+        # Monte Carlo sampling during stochastic pooling
         if self.training:
             ratio = F.softmax(combined_mean, dim=1)
             ratio = ratio.permute(0, 2, 1)
             ratio = ratio.reshape(-1, channels)
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
+
+            # Monte Carlo sampling: uzorkujemo iz softmax distribucije
+            monte_carlo_samples = [random.choices(range(channels), weights=ratio[i]) for i in range(ratio.shape[0])]
+            indices = torch.tensor(monte_carlo_samples).view(batch_size, -1, 1).permute(0, 2, 1).to(combined_mean.device)
+
             combined_mean = torch.gather(combined_mean, 1, indices)
             combined_mean = combined_mean.repeat(1, channels, 1)
         else:
@@ -122,7 +111,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = self.apply_gaussian_filter(combined_mean_cat + input, sigma=1)
+        output = combined_mean_cat + input
 
         return output, None
 
