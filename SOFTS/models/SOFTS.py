@@ -49,9 +49,10 @@ class STAR(nn.Module):
         self.gen2 = nn.Linear(d_series, d_core)
 
         # Adaptive cores
-        self.adaptive_core1 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core2 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core3 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core1 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core2 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core3 = nn.Linear(d_series, d_core // 4)
+        self.adaptive_core4 = nn.Linear(d_series, d_core // 4)
 
         # MLP to combine the cores non-linearly
         self.mlp = nn.Sequential(
@@ -82,9 +83,10 @@ class STAR(nn.Module):
         adaptive_core1 = self.adaptive_core1(input.mean(dim=1, keepdim=True))
         adaptive_core2 = self.adaptive_core2(input.mean(dim=1, keepdim=True))
         adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
+        adaptive_core4 = self.adaptive_core4(input.mean(dim=1, keepdim=True))
 
         # Concatenate the adaptive cores along the last dimension (features)
-        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3], dim=2)
+        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3, adaptive_core4], dim=2)
 
         # Pass the concatenated cores through the MLP to non-linearly combine them
         enriched_core = self.mlp(adaptive_core_concat)
