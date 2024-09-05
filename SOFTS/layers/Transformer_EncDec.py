@@ -1,9 +1,31 @@
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-
-
 class LACA(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(LACA, self).__init__()
+        # Inicijalizacija parametara kao trenirajući parametri
+        self.alpha = nn.Parameter(torch.tensor(alpha))
+        self.beta = nn.Parameter(torch.tensor(beta))
+
+    def forward(self, x):
+        # Kombinovanje operacija i eliminacija suvišnih relu poziva
+        relu_x = torch.clamp(x, min=0)  # Zamena za torch.relu(x)
+        relu_neg_x = torch.clamp(-x, min=0)  # Zamena za torch.relu(-x)
+
+        # Direktna primena kvadriranja
+        relu_neg_x_sq = relu_neg_x * relu_neg_x
+        relu_x_sq = relu_x * relu_x
+
+        # Kombinovanje računa
+        pos_part = 1 / (1 + self.alpha * relu_neg_x_sq)
+        neg_part = 1 / (1 + self.beta * relu_x_sq)
+
+        # Konačni rezultat
+        return pos_part - neg_part
+
+
+class LACA2(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LACA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
@@ -34,7 +56,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  F.gelu#LACA() #F.relu if activation == "relu" else F.gelu
+        self.activation =  LACA() #F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(
