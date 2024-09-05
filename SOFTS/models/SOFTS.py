@@ -42,13 +42,71 @@ class PositionalEmbedding(nn.Module):
 
 
 class STAR(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5):
+        super(STAR, self).__init__()
+
+        self.gen1 = nn.Linear(d_series, d_series)
+        self.gen2 = nn.Linear(d_series, d_core)
+
+        # Hierarchical core layers
+        self.local_core1 = nn.Linear(d_series, d_core // 2)  # For local core 1
+        self.local_core2 = nn.Linear(d_series, d_core // 2)  # For local core 2
+
+        self.global_core = nn.Linear(d_core, d_core)  # For global core combining
+
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
+
+        # Dropout layers
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.activation = nn.ReLU()  # Replace with LASA or any custom activation as needed
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Apply feed-forward layers
+        combined_mean = self.activation(self.gen1(input))
+        combined_mean = self.dropout1(combined_mean)  # Apply dropout
+        combined_mean = self.gen2(combined_mean)
+
+        # Hierarchical Core Formation
+        # Divide input into two halves and compute local cores
+        input_half1 = input[:, :channels // 2, :]  # First half of the channels
+        input_half2 = input[:, channels // 2:, :]  # Second half of the channels
+
+        local_core1 = self.local_core1(input_half1.mean(dim=1, keepdim=True))  # Local core for first half
+        local_core2 = self.local_core2(input_half2.mean(dim=1, keepdim=True))  # Local core for second half
+
+        # Combine the local cores to form the global core
+        hierarchical_core = torch.cat([local_core1, local_core2], dim=2)
+        hierarchical_core = self.global_core(hierarchical_core)  # Global core layer
+
+        # Add hierarchical core to combined_mean
+        combined_mean = combined_mean + hierarchical_core
+
+        # Concatenate the input and combined result for the next layer
+        combined_mean_cat = torch.cat([input, combined_mean], dim=2)
+
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout2(combined_mean_cat)  # Apply dropout
+        combined_mean_cat = self.gen4(combined_mean_cat)
+
+        # Adding residual connection
+        output = combined_mean_cat + input
+
+        return output, None
+
+class STAR44(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
-        self.temporal_embedding = PositionalEmbedding(d_series, max_len)
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -73,7 +131,7 @@ class STAR(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        input = self.temporal_embedding(input)
+        input = self.positional_embedding(input)
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
@@ -90,6 +148,7 @@ class STAR(nn.Module):
         # Concatenate the four outputs to form a vector of size d_core
         adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3, adaptive_core4], dim=-1)
 
+        # self.activation(
         combined_mean = combined_mean + adaptive_core_concat
 
         # Stochastic pooling
@@ -126,7 +185,7 @@ class STAR_(nn.Module):
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
-        self.temporal_embedding = PositionalEmbedding(d_series, max_len)
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -149,7 +208,7 @@ class STAR_(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        input = self.temporal_embedding(input)
+        input = self.positional_embedding(input)
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
@@ -200,7 +259,7 @@ class STAR2(nn.Module):
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
-        self.temporal_embedding = PositionalEmbedding(d_series, max_len)
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -221,7 +280,7 @@ class STAR2(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        input = self.temporal_embedding(input)
+        input = self.positional_embedding(input)
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
