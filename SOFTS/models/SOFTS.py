@@ -85,7 +85,6 @@ class STAR(nn.Module):
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
-
         # Sparse Attention (limit attention to nearby time steps)
         queries = self.query(combined_mean)
         keys = self.key(combined_mean)
@@ -94,10 +93,15 @@ class STAR(nn.Module):
         # Calculate sparse attention scores, considering only nearby time steps
         attention_scores = torch.matmul(queries, keys.transpose(-2, -1)) * self.scale
 
-        # Apply mask for sparse attention (e.g., only consider neighboring time steps)
+        # Create a mask for sparse attention (consider nearby time steps)
         mask = torch.triu(torch.ones(d_series, d_series), diagonal=2).bool()  # Example mask for sparse attention
-        attention_scores = attention_scores.masked_fill(mask.unsqueeze(0).unsqueeze(0).to(attention_scores.device),
-                                                        float('-inf'))
+
+        # Ensure the mask has the correct shape to match attention_scores
+        mask = mask.unsqueeze(0).unsqueeze(0).expand(batch_size, channels, d_series, d_series).to(
+            attention_scores.device)
+
+        # Apply the mask: set scores to -inf where mask is True (sparse attention)
+        attention_scores = attention_scores.masked_fill(mask, float('-inf'))
 
         # Softmax normalization
         attention_weights = self.softmax(attention_scores)
