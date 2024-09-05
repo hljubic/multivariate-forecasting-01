@@ -10,12 +10,12 @@ class LASA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LASA, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-        self.beta = nn.Parameter(torch.tensor(beta))
+        #self.alpha = nn.Parameter(torch.tensor(alpha))
+        #self.beta = nn.Parameter(torch.tensor(beta))
 
     def forward(self, x):
-        alpha = self.alpha
-        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
+        alpha = 1.0#self.alpha
+        beta = 1.0#self.beta # Linearni prijelaz za vrijednosti blizu nule
 
         # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
         relu_x = torch.relu(x)
