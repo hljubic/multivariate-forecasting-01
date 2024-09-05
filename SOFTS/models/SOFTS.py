@@ -27,7 +27,7 @@ class LASA(nn.Module):
 
         return pos_part - neg_part
 
-class XY(nn.Module):
+class TemporalEmbedding(nn.Module):
     def __init__(self, d_series, max_len=5000):
         super(TemporalEmbedding, self).__init__()
         self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
