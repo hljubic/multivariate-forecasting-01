@@ -5,6 +5,29 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from einops import rearrange, repeat
+
+import math
+
+
+class DSW_embedding(nn.Module):
+    def __init__(self, seg_len, d_model):
+        super(DSW_embedding, self).__init__()
+        self.seg_len = seg_len
+
+        self.linear = nn.Linear(seg_len, d_model)
+
+    def forward(self, x):
+        batch, ts_len, ts_dim = x.shape
+
+        x_segment = rearrange(x, 'b (seg_num seg_len) d -> (b d seg_num) seg_len', seg_len=self.seg_len)
+        x_embed = self.linear(x_segment)
+        x_embed = rearrange(x_embed, '(b d seg_num) d_model -> b d seg_num d_model', b=batch, d=ts_dim)
+
+        return x_embed
 
 class LASA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -166,7 +189,8 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         # Embedding
-        self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
+        self.enc_embedding = DSW_embedding(configs.seq_len, configs.d_model)
+        #self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
         self.use_norm = configs.use_norm
         # Encoder
         self.encoder = Encoder(
@@ -184,64 +208,6 @@ class Model(nn.Module):
         # Decoder
         self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
 
-    def gaussian_filter(self, input_tensor, kernel_size, sigma):
-        """
-        Apply a Gaussian filter to smooth the input_tensor.
-
-        Args:
-            input_tensor (torch.Tensor): The input tensor to be smoothed (batch_size, seq_len, num_features).
-            kernel_size (int): The size of the Gaussian kernel.
-            sigma (float): The standard deviation of the Gaussian distribution.
-
-        Returns:
-            torch.Tensor: The smoothed tensor.
-        """
-        # Create a 1D Gaussian kernel
-        kernel = torch.arange(kernel_size, dtype=torch.float32) - (kernel_size - 1) / 2.0
-        kernel = torch.exp(-0.5 * (kernel / sigma) ** 2)
-        kernel = kernel / kernel.sum()  # Normalize the kernel to ensure sum is 1
-
-        # Ensure the kernel is expanded for each feature (group)
-        kernel = kernel.view(1, 1, -1).to(input_tensor.device)
-
-        # Apply Gaussian filter for each feature across the sequence dimension
-        num_features = input_tensor.size(2)
-        smoothed_tensor = []
-        for i in range(num_features):
-            # Select the i-th feature (sequence length along the dimension 1)
-            feature_tensor = input_tensor[:, :, i].unsqueeze(1)  # [batch_size, 1, seq_len]
-            smoothed_feature = F.conv1d(feature_tensor, kernel, padding=(kernel_size - 1) // 2)
-            smoothed_tensor.append(smoothed_feature)
-
-        # Concatenate along the feature dimension (dim=2)
-        smoothed_tensor = torch.cat(smoothed_tensor, dim=1).permute(0, 2, 1)
-
-        return smoothed_tensor
-
-    def estimate_frequency(self, data):
-        # Estimate frequency using FFT (Fast Fourier Transform)
-        fft_result = torch.fft.rfft(data, dim=1)
-        # Take the magnitude of the frequencies
-        frequencies = torch.abs(fft_result)
-        # Calculate average frequency magnitude
-        avg_frequency = torch.mean(frequencies, dim=1)
-        return avg_frequency
-
-    def normalize_frequencies(self, data, target_frequency):
-        # Estimate the frequency of each sequence
-        frequencies = self.estimate_frequency(data)
-
-        # Calculate scaling factors based on how far each sequence is from the target frequency
-        scaling_factors = frequencies / target_frequency
-
-        # Apply Gaussian filter with inverse scaling factor (stronger smoothing for higher frequency sequences)
-        length = data.size(1)
-        for i in range(data.size(0)):
-            sigma = 1.0 / scaling_factors[i].item() if scaling_factors[i].numel() == 1 else 1.0 / scaling_factors[i][
-                0].item()  # Handle the case of multi-element tensors
-            data[i, :, :] = self.gaussian_filter(data[i:i + 1, :, :], kernel_size=9, sigma=sigma)
-
-        return data
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
         if self.use_norm:
@@ -249,8 +215,6 @@ class Model(nn.Module):
             x_enc = x_enc - means
             stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
             x_enc /= stdev
-
-        x_enc = self.normalize_frequencies(x_enc, target_frequency=1.5)
 
         _, _, N = x_enc.shape
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
