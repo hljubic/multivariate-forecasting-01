@@ -15,7 +15,7 @@ class LASA(nn.Module):
 
     def forward(self, x):
         alpha = self.alpha
-        beta = self.beta  # Linearni prijelaz za vrijednosti blizu nule
+        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
 
         # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
         relu_x = torch.relu(x)
@@ -26,7 +26,6 @@ class LASA(nn.Module):
         neg_part = 1 / (1 + beta * relu_x ** 2)
 
         return pos_part - neg_part
-
 
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_series, max_len=5000):
@@ -43,10 +42,84 @@ class PositionalEmbedding(nn.Module):
 
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, n_heads=8, dropout_rate=0.5, max_len=5000):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings and Multi-Head Attention
+        Adaptive STAR with Temporal Embeddings and Dropout
+        """
+
+        self.temporal_embedding = PositionalEmbedding(d_series, max_len)
+        self.gen1 = nn.Linear(d_series, d_series)
+        self.gen2 = nn.Linear(d_series, d_core)
+
+        # Adaptive Core Formation
+        self.adaptive_core1 = nn.Linear(d_series, d_core)
+        self.adaptive_core2 = nn.Linear(d_series, d_core)
+        self.adaptive_core3 = nn.Linear(d_series, d_core)
+
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
+
+        # Dropout layers
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.activation = LASA()
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Apply temporal embedding
+        input = self.temporal_embedding(input)
+
+        # Set FFN
+        combined_mean = self.activation(self.gen1(input))
+        combined_mean = self.dropout1(combined_mean)  # Apply dropout
+        combined_mean = self.gen2(combined_mean)
+
+        # Adaptive Core Formation
+        adaptive_core1 = self.adaptive_core1(input.mean(dim=1, keepdim=True))
+        adaptive_core2 = self.adaptive_core2(input.mean(dim=1, keepdim=True))
+        adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
+
+        # Calculating the arithmetic mean of the three adaptive cores
+        adaptive_core_mean = (adaptive_core1 + adaptive_core2 + adaptive_core3) / 3
+
+        combined_mean = combined_mean + adaptive_core_mean
+
+        # Stochastic pooling
+        if self.training:
+            ratio = F.softmax(combined_mean, dim=1)
+            ratio = ratio.permute(0, 2, 1)
+            ratio = ratio.reshape(-1, channels)
+            indices = torch.multinomial(ratio, 1)
+            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
+            combined_mean = torch.gather(combined_mean, 1, indices)
+            combined_mean = combined_mean.repeat(1, channels, 1)
+        else:
+            weight = F.softmax(combined_mean, dim=1)
+            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
+
+        combined_mean = self.dropout2(combined_mean)  # Apply dropout
+
+        # MLP fusion
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
+        combined_mean_cat = self.gen4(combined_mean_cat)
+
+        # Dodajemo rezidualnu konekciju
+        output = combined_mean_cat + input
+
+        return output, None
+
+
+class STAR2(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+        super(STAR, self).__init__()
+        """
+        Adaptive STAR with Temporal Embeddings and Dropout
         """
 
         self.temporal_embedding = PositionalEmbedding(d_series, max_len)
@@ -55,9 +128,6 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         self.adaptive_core = nn.Linear(d_series, d_core)
-
-        # Multi-Head Attention
-        self.multihead_attention = nn.MultiheadAttention(embed_dim=d_series, num_heads=n_heads, dropout=dropout_rate)
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -84,11 +154,6 @@ class STAR(nn.Module):
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
-        # Apply Multi-Head Attention
-        combined_mean = combined_mean.permute(1, 0, 2)  # [Seq_len, Batch, d_series]
-        attn_output, _ = self.multihead_attention(combined_mean, combined_mean, combined_mean)
-        combined_mean = attn_output.permute(1, 0, 2)  # [Batch, Seq_len, d_series]
-
         # Stochastic pooling
         if self.training:
             ratio = F.softmax(combined_mean, dim=1)
@@ -105,6 +170,7 @@ class STAR(nn.Module):
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
         # mlp fusion
+        # Rezidualna konekcija s ulaznim podacima
         combined_mean_cat = torch.cat([input, combined_mean], -1)
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
@@ -129,7 +195,7 @@ class Model(nn.Module):
         self.encoder = Encoder(
             [
                 EncoderLayer(
-                    STAR(configs.d_model, configs.d_core, n_heads=8),  # Updated with n_heads
+                    STAR(configs.d_model, configs.d_core),
                     configs.d_model,
                     configs.d_ff,
                     dropout=configs.dropout,
