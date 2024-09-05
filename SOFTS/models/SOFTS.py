@@ -91,7 +91,7 @@ class STAR(nn.Module):
 
         # Generate gating values from the input
         gate_values = self.gate_weights(input.mean(dim=1, keepdim=True))  # [B, 1, 3]
-        gate1_value, gate2_value, gate3_value = gate_values[:, :, 0], gate_values[:, :, 1], gate_values[:, :, 2], gate_values[:, :, 3]
+        gate1_value, gate2_value, gate3_value, gate4_value = gate_values[:, :, 0], gate_values[:, :, 1], gate_values[:, :, 2], gate_values[:, :, 3]
 
         # Apply gating mechanisms to control the contribution of each core
         gated_core1 = adaptive_core1 * self.gate1(gate1_value).unsqueeze(2)
