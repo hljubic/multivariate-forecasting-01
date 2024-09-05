@@ -122,7 +122,7 @@ class STAR(nn.Module):
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + self.apply_gaussian_filter(input, sigma=1)
+        output = self.apply_gaussian_filter(combined_mean_cat + input, sigma=1)
 
         return output, None
 
