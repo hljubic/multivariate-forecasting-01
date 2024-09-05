@@ -5,6 +5,9 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
+from einops import rearrange, repeat
+import math
+
 class LACU(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LACU, self).__init__()
@@ -41,101 +44,23 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+
+# Define the DSW embedding module
+class DSW_embedding(nn.Module):
+    def __init__(self, seg_len, d_model):
+        super(DSW_embedding, self).__init__()
+        self.seg_len = seg_len
+        self.linear = nn.Linear(seg_len, d_model)
+
+    def forward(self, x):
+        batch, ts_len, ts_dim = x.shape
+        x_segment = rearrange(x, 'b (seg_num seg_len) d -> (b d seg_num) seg_len', seg_len=self.seg_len)
+        x_embed = self.linear(x_segment)
+        x_embed = rearrange(x_embed, '(b d seg_num) d_model -> b d seg_num d_model', b=batch, d=ts_dim)
+        return x_embed
+
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, segment_length=10):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings and Random Segment Permutation between Channels
-        """
-
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-
-        # Adaptive Core Formation
-        self.adaptive_core = nn.Linear(d_series, d_core)
-
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LACU()
-
-        # Segment length for random permutation
-        self.segment_length = segment_length
-
-    def random_permute_segments(self, input):
-        """
-        Nasumična permutacija segmenata između kanala.
-        """
-        batch_size, channels, d_series = input.shape
-
-        # Broj segmenata u seriji
-        num_segments = d_series // self.segment_length
-
-        # Podsecanje na segment_length
-        segmented_input = input[:, :, :num_segments * self.segment_length].reshape(
-            batch_size, channels, num_segments, self.segment_length
-        )
-
-        # Nasumična permutacija segmenata po kanalima
-        for b in range(batch_size):
-            permuted_indices = torch.randperm(channels)
-            segmented_input[b] = segmented_input[b, permuted_indices]
-
-        # Vraćanje u originalni oblik (batch_size, channels, d_series)
-        permuted_input = segmented_input.reshape(batch_size, channels, num_segments * self.segment_length)
-
-        # Ako je `d_series` nije deljivo sa `segment_length`, vraćamo preostale podatke na kraj
-        if d_series % self.segment_length != 0:
-            permuted_input = torch.cat([permuted_input, input[:, :, num_segments * self.segment_length:]], dim=2)
-
-        return permuted_input
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply temporal embedding
-        input = self.positional_embedding(input)
-
-        # Set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout1(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # Adaptive Core Formation
-        adaptive_core = self.adaptive_core(input)
-        combined_mean = combined_mean + adaptive_core
-
-        # Random permutation of segments between channels
-        if self.training:
-            combined_mean = self.random_permute_segments(combined_mean)
-
-        combined_mean = self.dropout2(combined_mean)  # Apply dropout
-
-        # MLP fusion
-        # Rezidualna konekcija s ulaznim podacima
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
-
-        return output, None
-
-
-
-class STA4R(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -143,6 +68,8 @@ class STA4R(nn.Module):
         """
 
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
+        self.dsw_embedding = DSW_embedding(seg_len, d_model)
+
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -164,8 +91,9 @@ class STA4R(nn.Module):
 
         # Apply temporal embedding
         input = self.positional_embedding(input)
+        # Apply DSW embedding
+        input = self.dsw_embedding(input)
 
-        #return self.gen4(self.dropout1(self.activation(self.gen4(input)))) + input, None
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
