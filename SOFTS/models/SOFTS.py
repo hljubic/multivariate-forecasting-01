@@ -114,8 +114,8 @@ class STAR(nn.Module):
         output = combined_mean_cat + input
 
         if self.use_norm:
-            output = output * (stdev[:, 0, :].unsqueeze(1).repeat(1, 256, 1))
-            output = output + (means[:, 0, :].unsqueeze(1).repeat(1, 256, 1))
+            output = output * (stdev[:, 0, :].unsqueeze(1).repeat(1, channels, 1))
+            output = output + (means[:, 0, :].unsqueeze(1).repeat(1, channels, 1))
         return output, None
 
 
