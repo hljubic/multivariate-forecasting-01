@@ -46,33 +46,33 @@ class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings and Dropout in Star Topology
+        Tree-like Network Architecture with Temporal Embeddings and Dropout
         """
 
         # Pozicijska embeding komponenta
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
 
-        # Pet grana (zračenja) kao dio zvijezde
+        # Prva grana stabla (koreni)
         self.branch1 = nn.Linear(d_series, d_core)
         self.branch2 = nn.Linear(d_series, d_core)
-        self.branch3 = nn.Linear(d_series, d_core)
-        self.branch4 = nn.Linear(d_series, d_core)
-        self.branch5 = nn.Linear(d_series, d_core)
 
-        # Adaptivna jezgra (središte zvijezde)
-        self.center = nn.Linear(d_core * 5, d_core)
+        # Srednje grane stabla
+        self.mid_branch1 = nn.Linear(d_core, d_core // 2)
+        self.mid_branch2 = nn.Linear(d_core, d_core // 2)
+        self.mid_branch3 = nn.Linear(d_core, d_core // 2)
+        self.mid_branch4 = nn.Linear(d_core, d_core // 2)
 
-        # Povratne grane prema izlazu
-        self.out1 = nn.Linear(d_core, d_series)
-        self.out2 = nn.Linear(d_core, d_series)
-        self.out3 = nn.Linear(d_core, d_series)
-        self.out4 = nn.Linear(d_core, d_series)
-        self.out5 = nn.Linear(d_core, d_series)
+        # Gornje grane (listovi)
+        self.leaf1 = nn.Linear(d_core // 2, d_series)
+        self.leaf2 = nn.Linear(d_core // 2, d_series)
+        self.leaf3 = nn.Linear(d_core // 2, d_series)
+        self.leaf4 = nn.Linear(d_core // 2, d_series)
 
         # Dropout slojevi
         self.dropout1 = nn.Dropout(dropout_rate)
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
+        self.dropout4 = nn.Dropout(dropout_rate)
 
         # Aktivacija
         self.activation = LACA()
@@ -83,45 +83,45 @@ class STAR(nn.Module):
         # Primjena temporalnog embeddinga
         input = self.positional_embedding(input)
 
-        # Aktiviranje svake grane (zračenje zvijezde)
+        # Prva grana stabla (grananje u dve grane)
         branch1_out = self.activation(self.branch1(input))
         branch2_out = self.activation(self.branch2(input))
-        branch3_out = self.activation(self.branch3(input))
-        branch4_out = self.activation(self.branch4(input))
-        branch5_out = self.activation(self.branch5(input))
 
-        # Dropout na grane
+        # Dropout na prve grane
         branch1_out = self.dropout1(branch1_out)
         branch2_out = self.dropout1(branch2_out)
-        branch3_out = self.dropout1(branch3_out)
-        branch4_out = self.dropout1(branch4_out)
-        branch5_out = self.dropout1(branch5_out)
 
-        # Spajanje grana u adaptivno središte zvijezde
-        combined = torch.cat([branch1_out, branch2_out, branch3_out, branch4_out, branch5_out], -1)
-        center_out = self.activation(self.center(combined))
+        # Srednje grane stabla (grananje iz svake grane u dve podgrane)
+        mid_branch1_out = self.activation(self.mid_branch1(branch1_out))
+        mid_branch2_out = self.activation(self.mid_branch2(branch1_out))
+        mid_branch3_out = self.activation(self.mid_branch3(branch2_out))
+        mid_branch4_out = self.activation(self.mid_branch4(branch2_out))
 
-        # Dropout na središte
-        center_out = self.dropout2(center_out)
+        # Dropout na srednje grane
+        mid_branch1_out = self.dropout2(mid_branch1_out)
+        mid_branch2_out = self.dropout2(mid_branch2_out)
+        mid_branch3_out = self.dropout2(mid_branch3_out)
+        mid_branch4_out = self.dropout2(mid_branch4_out)
 
-        # Povratak prema vanjskim slojevima kroz izlazne grane
-        out1 = self.activation(self.out1(center_out))
-        out2 = self.activation(self.out2(center_out))
-        out3 = self.activation(self.out3(center_out))
-        out4 = self.activation(self.out4(center_out))
-        out5 = self.activation(self.out5(center_out))
+        # Gornje grane stabla (listovi)
+        leaf1_out = self.activation(self.leaf1(mid_branch1_out))
+        leaf2_out = self.activation(self.leaf2(mid_branch2_out))
+        leaf3_out = self.activation(self.leaf3(mid_branch3_out))
+        leaf4_out = self.activation(self.leaf4(mid_branch4_out))
 
-        # Kombiniraj izlaze iz svih grana
-        output = (out1 + out2 + out3 + out4 + out5) / 5
+        # Dropout na listove
+        leaf1_out = self.dropout3(leaf1_out)
+        leaf2_out = self.dropout3(leaf2_out)
+        leaf3_out = self.dropout3(leaf3_out)
+        leaf4_out = self.dropout3(leaf4_out)
 
-        # Dropout na izlaz
-        output = self.dropout3(output)
+        # Kombiniraj izlaze sa listova (kumulativno vraćanje informacija s listova)
+        output = (leaf1_out + leaf2_out + leaf3_out + leaf4_out) / 4
 
         # Rezidualna konekcija s ulazom
         output = output + input
 
         return output, None
-
 
 class STAR2(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
