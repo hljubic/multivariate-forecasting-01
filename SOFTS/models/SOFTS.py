@@ -61,15 +61,13 @@ class DSW_embedding(nn.Module):
 
 
 class STAR(nn.Module):
-    def __init__(self, seg_len, d_series, d_core, dropout_rate=0.5, max_len=5000):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.dsw_embedding = DSW_embedding(11, d_series)
-
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -90,10 +88,7 @@ class STAR(nn.Module):
         batch_size, channels, d_series = input.shape
 
         # Apply temporal embedding
-        #input = self.positional_embedding(input)
-        # Apply DSW embedding
-        input = self.dsw_embedding(input)
-
+        input = self.positional_embedding(input)
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
@@ -145,7 +140,7 @@ class Model(nn.Module):
         self.encoder = Encoder(
             [
                 EncoderLayer(
-                    STAR(configs.seq_len, configs.d_model, configs.d_core),
+                    STAR(configs.d_model, configs.d_core),
                     configs.d_model,
                     configs.d_ff,
                     dropout=configs.dropout,
