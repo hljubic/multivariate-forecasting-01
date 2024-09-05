@@ -28,27 +28,6 @@ class LACA(nn.Module):
         # Konačni rezultat
         return pos_part - neg_part
 
-class LACA2(nn.Module):
-    def __init__(self, alpha=1.0, beta=1.0):
-        super(LACA, self).__init__()
-        # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-        self.beta = nn.Parameter(torch.tensor(beta))
-
-    def forward(self, x):
-        alpha = self.alpha
-        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
-
-        # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
-        relu_x = torch.relu(x)
-        relu_neg_x = torch.relu(-x)
-
-        # Direktna primjena u formuli
-        pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
-        neg_part = 1 / (1 + beta * relu_x ** 2)
-
-        return pos_part - neg_part
-
 class PositionalEmbedding(nn.Module):
     def __init__(self, d_series, max_len=5000):
         super(PositionalEmbedding, self).__init__()
@@ -62,7 +41,84 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
+
+
 class STAR(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, temperature=1.0):
+        super(STAR, self).__init__()
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+        self.gen1 = nn.Linear(d_series, d_series)
+        self.gen2 = nn.Linear(d_series, d_core)
+
+        # Adaptive Core Formation sa MLP
+        self.adaptive_core_mlp = nn.Sequential(
+            nn.Linear(d_series, d_core),
+            nn.ReLU(),
+            nn.Linear(d_core, d_core)
+        )
+
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
+
+        # Dropout slojevi
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        # Normalizacijski slojevi (BatchNorm)
+        self.norm1 = nn.BatchNorm1d(d_core)
+        self.norm2 = nn.BatchNorm1d(d_series)
+
+        # Gumbel temperature
+        self.temperature = temperature
+
+        # Aktivaciona funkcija
+        self.activation = LACA()
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Primeni temporalnu ugradnju
+        input = self.positional_embedding(input)
+
+        # Feed-forward network
+        combined_mean = self.activation(self.gen1(input))
+        combined_mean = self.dropout1(combined_mean)
+        combined_mean = self.gen2(combined_mean)
+
+        # Adaptive Core Formation sa MLP-om
+        adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
+        combined_mean = combined_mean + adaptive_core
+
+        # Stohastičko uzorkovanje sa Gumbel-Softmax
+        if self.training:
+            gumbel_noise = -torch.log(-torch.log(torch.rand_like(combined_mean)))
+            combined_mean = F.softmax((combined_mean + gumbel_noise) / self.temperature, dim=1)
+            ratio = combined_mean.permute(0, 2, 1).reshape(-1, channels)
+            indices = torch.multinomial(ratio, 1)
+            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
+            combined_mean = torch.gather(combined_mean, 1, indices)
+            combined_mean = combined_mean.repeat(1, channels, 1)
+        else:
+            weight = F.softmax(combined_mean, dim=1)
+            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
+
+        combined_mean = self.norm1(combined_mean)  # Primena normalizacije
+        combined_mean = self.dropout2(combined_mean)
+
+        # MLP fuzija sa rezidualnom konekcijom
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout3(combined_mean_cat)
+        combined_mean_cat = self.gen4(combined_mean_cat)
+
+        # Dodavanje rezidualne konekcije i normalizacije
+        output = self.norm2(combined_mean_cat + input)
+
+        return output, None
+
+
+class STAR33(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
