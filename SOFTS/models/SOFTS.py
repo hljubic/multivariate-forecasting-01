@@ -5,8 +5,6 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
-from einops import rearrange, repeat
-import math
 
 class LACU(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -44,23 +42,74 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-
-# Define the DSW embedding module
-class DSW_embedding(nn.Module):
-    def __init__(self, seg_len, d_model):
-        super(DSW_embedding, self).__init__()
-        self.seg_len = seg_len
-        self.linear = nn.Linear(seg_len, d_model)
-
-    def forward(self, x):
-        batch, ts_len, ts_dim = x.shape
-        x_segment = rearrange(x, 'b (seg_num seg_len) d -> (b d seg_num) seg_len', seg_len=self.seg_len)
-        x_embed = self.linear(x_segment)
-        x_embed = rearrange(x_embed, '(b d seg_num) d_model -> b d seg_num d_model', b=batch, d=ts_dim)
-        return x_embed
-
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 class STAR(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+        super(STAR, self).__init__()
+        """
+        Bi-directional STAR with Temporal Embeddings and Dropout
+        """
+
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+        self.gen1 = nn.Linear(d_series, d_series)
+        self.gen2 = nn.Linear(d_series, d_core)
+
+        # Adaptive Core Formation
+        self.adaptive_core = nn.Linear(d_series, d_core)
+
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
+
+        # Dropout layers
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.activation = LACU()
+
+    def forward_once(self, input):
+        # Ovo je osnovni prolaz kroz mrežu
+        combined_mean = self.activation(self.gen1(input))
+        combined_mean = self.dropout1(combined_mean)  # Apply dropout
+        combined_mean = self.gen2(combined_mean)
+
+        # Adaptive Core Formation
+        adaptive_core = self.adaptive_core(input)
+        combined_mean = combined_mean + adaptive_core
+
+        combined_mean = self.dropout2(combined_mean)  # Apply dropout
+
+        # MLP fusion
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
+        combined_mean_cat = self.gen4(combined_mean_cat)
+
+        # Dodajemo rezidualnu konekciju
+        output = combined_mean_cat + input
+        return output
+
+    def forward(self, input, *args, **kwargs):
+        # Prvo prolazimo kroz mrežu u smjeru unaprijed
+        output_forward = self.forward_once(input)
+
+        # Zatim prolazimo kroz mrežu u smjeru unazad (reverzno)
+        reversed_input = torch.flip(input, dims=[1])  # Obrćemo kanale duž vremenske dimenzije
+        output_backward = self.forward_once(reversed_input)
+
+        # Vraćamo izlaz iz unazad prolaza u normalan redoslijed
+        output_backward = torch.flip(output_backward, dims=[1])
+
+        # Kombinovanje oba izlaza (možemo koristiti zbrajanje, prosjek, concatenation, itd.)
+        output = (output_forward + output_backward) / 2
+
+        return output, None
+
+
+class STAR4(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
