@@ -1,28 +1,6 @@
 import torch.nn as nn
 import torch.nn.functional as F
-import torch
 
-
-class LASA(nn.Module):
-    def __init__(self, alpha=1.0, beta=1.0):
-        super(LASA, self).__init__()
-        # Inicijalizacija parametara kao trenirajući parametri
-        self.alpha = nn.Parameter(torch.tensor(alpha))
-        self.beta = nn.Parameter(torch.tensor(beta))
-
-    def forward(self, x):
-        alpha = self.alpha
-        beta = self.beta # Linearni prijelaz za vrijednosti blizu nule
-
-        # Izbjegavamo višestruke pozive relu funkciji i kombinujemo operacije
-        relu_x = torch.relu(x)
-        relu_neg_x = torch.relu(-x)
-
-        # Direktna primjena u formuli
-        pos_part = 1 / (1 + alpha * relu_neg_x ** 2)
-        neg_part = 1 / (1 + beta * relu_x ** 2)
-
-        return pos_part - neg_part
 
 class EncoderLayer(nn.Module):
     def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu", **kwargs):
@@ -34,7 +12,7 @@ class EncoderLayer(nn.Module):
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.dropout = nn.Dropout(dropout)
-        self.activation =  LASA() #F.relu if activation == "relu" else F.gelu
+        self.activation = F.relu if activation == "relu" else F.gelu
 
     def forward(self, x, attn_mask=None, tau=None, delta=None, **kwargs):
         new_x, attn = self.attention(

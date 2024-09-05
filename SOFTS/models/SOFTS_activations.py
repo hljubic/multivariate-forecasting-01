@@ -6,9 +6,44 @@ from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
 
-class LASA(nn.Module):
+class LearnableAsymCauchy44(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
-        super(LASA, self).__init__()
+        super(LearnableAsymCauchy44, self).__init__()
+        # Inicijalizacija parametara kao trenirajući parametri
+        self.alpha = 1.0#nn.Parameter(torch.tensor(alpha))
+        self.beta = 1.0#nn.Parameter(torch.tensor(beta))
+
+    def forward(self, x):
+        alpha = 1.3#nn.Parameter(torch.tensor(alpha))
+        beta = 0.7#nn.Parameter(torch.tensor(beta))
+        pos_part = 1 / (1 + alpha * torch.relu(x) ** 2)
+        neg_part = 1 / (1 + beta * torch.relu(-x) ** 2)
+        return torch.exp(pos_part - neg_part)
+
+class LeakyCustomActivation(nn.Module):
+    def __init__(self, negative_slope=0.2, positive_slope=0.2):
+        super(LeakyCustomActivation, self).__init__()
+        self.negative_slope = negative_slope
+        self.positive_slope = positive_slope
+
+    def forward(self, x):
+        # Apply the leaky custom piecewise function
+        out = torch.where(x <= -1, self.negative_slope * (x + 1),
+                          torch.where(x >= 1, self.positive_slope * (x - 1) + 1, 0.5 * x + 0.5))
+        return out
+class CustomActivation(nn.Module):
+    def __init__(self):
+        super(CustomActivation, self).__init__()
+
+    def forward(self, x):
+        # Apply the custom piecewise function
+        out = torch.where(x <= -1, torch.zeros_like(x),
+                          torch.where(x >= 1, torch.ones_like(x), 0.5 * x + 0.5))
+        return out
+
+class LearnableAsymCauchy(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(LearnableAsymCauchy, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
         self.alpha = nn.Parameter(torch.tensor(alpha))
         self.beta = nn.Parameter(torch.tensor(beta))
@@ -27,8 +62,20 @@ class LASA(nn.Module):
 
         return pos_part - neg_part
 
+class AsymCauchy(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0):
+        super(AsymCauchy, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+
+    def forward(self, x):
+        # Apply the piecewise AsymCauchy function
+        pos_part = 1 / (1 + self.alpha * x.pow(2))
+        neg_part = -1 / (1 + self.beta * x.pow(2))
+        return torch.where(x >= 0, pos_part, neg_part)
+
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.1):
+    def __init__(self, d_series, d_core):
         super(STAR, self).__init__()
         """
         STar Aggregate-Redistribute Module
@@ -38,27 +85,21 @@ class STAR(nn.Module):
         self.gen2 = nn.Linear(d_series, d_core)
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout = nn.Dropout(p=dropout_rate)
-
-        self.activation = LASA()
+        
+        self.activation = LearnableAsymCauchy()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
         # set FFN
         combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout(combined_mean)  # Apply dropout
         combined_mean = self.gen2(combined_mean)
 
         # stochastic pooling
         if self.training:
-            #ratio = F.softmax(combined_mean, dim=1)
-            #ratio = ratio.permute(0, 2, 1)
-            # ratio = ratio.reshape(-1, channels)
-            ratio = F.softmax(combined_mean, dim=1).permute(0, 2, 1).reshape(-1, channels)
-
+            ratio = F.softmax(combined_mean, dim=1)
+            ratio = ratio.permute(0, 2, 1)
+            ratio = ratio.reshape(-1, channels)
             indices = torch.multinomial(ratio, 1)
             indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
             combined_mean = torch.gather(combined_mean, 1, indices)
@@ -70,7 +111,6 @@ class STAR(nn.Module):
         # mlp fusion
         combined_mean_cat = torch.cat([input, combined_mean], -1)
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
         output = combined_mean_cat
 
