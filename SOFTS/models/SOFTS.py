@@ -72,7 +72,7 @@ class STAR(nn.Module):
         # Apply temporal embedding
         input = self.positional_embedding(input)
 
-        return self.gen4(input), None
+        return self.activation(self.gen4(input)), None
 
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
