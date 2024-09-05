@@ -39,10 +39,6 @@ class PositionalEmbedding(nn.Module):
     def forward(self, x):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,7 +65,7 @@ class STAR(nn.Module):
         self.adaptive_core_diff = nn.Linear(d_series, d_core)
 
         # Gaussian filter for smoothing diff_out
-        self.gaussian_filter = self.create_gaussian_filter(sigma, kernel_size=5)
+        self.gaussian_filter = self.create_gaussian_filter(sigma, kernel_size=5, num_channels=d_core)
 
         # Fusion layers
         self.gen3 = nn.Linear(d_series + d_core, d_series)
@@ -149,14 +145,16 @@ class STAR(nn.Module):
         weighted_sum = torch.sum(combined_mean * weight, dim=1, keepdim=True)
         return weighted_sum.repeat(1, channels, 1)
 
-    def create_gaussian_filter(self, sigma, kernel_size):
+    def create_gaussian_filter(self, sigma, kernel_size, num_channels):
         # Create a Gaussian kernel
         kernel = torch.tensor([math.exp(-(x - kernel_size // 2) ** 2 / (2 * sigma ** 2)) for x in range(kernel_size)])
         kernel = kernel / kernel.sum()  # Normalize kernel
 
-        # Reshape to 1D convolutional weight
+        # Reshape to be applied to all channels
         kernel = kernel.view(1, 1, -1)  # Shape: (out_channels, in_channels, kernel_size)
-        gaussian_filter = nn.Conv1d(1, 1, kernel_size=kernel_size, padding=kernel_size // 2, bias=False)
+        kernel = kernel.repeat(num_channels, 1, 1)  # Repeat for all channels
+
+        gaussian_filter = nn.Conv1d(in_channels=num_channels, out_channels=num_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=num_channels, bias=False)
         gaussian_filter.weight.data = kernel
         gaussian_filter.weight.requires_grad = False  # Kernel is not trainable
         return gaussian_filter
