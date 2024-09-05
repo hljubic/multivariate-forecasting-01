@@ -81,14 +81,14 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        combined_mean = combined_mean + adaptive_core
+        combined_mean = combined_mean# + adaptive_core
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
         # mlp fusion
         # Rezidualna konekcija s ulaznim podacima
-        #combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean))
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
 
