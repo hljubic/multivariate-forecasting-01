@@ -217,7 +217,7 @@ class Model(nn.Module):
             x_enc /= stdev
 
         _, _, N = x_enc.shape
-        enc_out = self.enc_embedding(x_enc, x_mark_enc)
+        enc_out = self.enc_embedding(x_enc)#, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
 
