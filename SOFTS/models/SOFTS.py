@@ -64,7 +64,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = LASA()
+        self.activation = LACA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
