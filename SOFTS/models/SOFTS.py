@@ -83,7 +83,7 @@ class STAR(nn.Module):
         self.dropouts = nn.ModuleList([nn.Dropout(dropout_rate) for _ in range(num_layers)])
 
         # Aktivacija
-        self.activation = LACA()
+        self.activation = LACU()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
