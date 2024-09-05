@@ -114,7 +114,7 @@ class Model(nn.Module):
         self.seq_len = configs.seq_len
         self.pred_len = configs.pred_len
         # Embedding
-        self.enc_embedding = PositionalEmbedding(configs.pred_len, 5000)
+        self.enc_embedding = PositionalEmbedding(configs.d_core, 5000)
         #self.enc_embedding = DataEmbedding_inverted(configs.seq_len, configs.d_model, configs.dropout)
         self.use_norm = configs.use_norm
         # Encoder
