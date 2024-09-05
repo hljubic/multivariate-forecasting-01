@@ -40,61 +40,107 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Custom model with Convolutional layers and LayerNorm regularization
+        Adaptive STAR with Temporal Embeddings and Dropout.
+        This version handles separate trend and difference components.
         """
 
+        # Positional embedding for trend and differences
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.conv1 = nn.Conv1d(d_series, d_series, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv1d(d_series, d_core, kernel_size=3, padding=1)
 
-        # Adaptive Core Formation using GRU
-        self.gru = nn.GRU(d_series, d_core, batch_first=True)
+        # Trend branch
+        self.trend_gen1 = nn.Linear(d_series, d_series)
+        self.trend_gen2 = nn.Linear(d_series, d_core)
+        self.adaptive_core_trend = nn.Linear(d_series, d_core)
 
-        self.fc1 = nn.Linear(d_series + d_core, d_series)
-        self.fc2 = nn.Linear(d_series, d_series)
+        # Difference branch
+        self.diff_gen1 = nn.Linear(d_series, d_series)
+        self.diff_gen2 = nn.Linear(d_series, d_core)
+        self.adaptive_core_diff = nn.Linear(d_series, d_core)
 
-        # Using LayerNorm instead of Dropout
-        self.norm1 = nn.LayerNorm(d_series)
-        self.norm2 = nn.LayerNorm(d_core)
+        # Fusion layers
+        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        self.gen4 = nn.Linear(d_series, d_series)
 
-        self.activation = LASA()
+        # Dropout layers
+        self.dropout1 = nn.Dropout(dropout_rate)
+        self.dropout2 = nn.Dropout(dropout_rate)
+        self.dropout3 = nn.Dropout(dropout_rate)
+
+        self.activation = LASA()  # Assuming LASA is a custom activation function
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
-        # Apply temporal embedding
+        # Apply positional embedding
         input = self.positional_embedding(input)
 
-        # Convolution layers instead of linear
-        conv_out = self.conv1(input.permute(0, 2, 1))  # Change input shape for Conv1d
-        conv_out = self.activation(self.conv2(conv_out)).permute(0, 2, 1)  # Back to (batch, seq_len, features)
+        # === Trend Branch ===
+        trend_out = self.activation(self.trend_gen1(input))
+        trend_out = self.dropout1(trend_out)
+        trend_out = self.trend_gen2(trend_out)
 
-        # Adaptive Core Formation with GRU
-        gru_out, _ = self.gru(input)
+        # Adaptive Core for trend
+        adaptive_core_trend = self.adaptive_core_trend(input.mean(dim=1, keepdim=True))
+        trend_out = trend_out + adaptive_core_trend
 
-        # Concatenation and fusion
-        combined = torch.cat([conv_out, gru_out], -1)
-        combined = self.fc1(combined)
-        combined = self.norm1(combined)
+        # === Difference Branch ===
+        diff_out = self.activation(self.diff_gen1(input))
+        diff_out = self.dropout1(diff_out)
+        diff_out = self.diff_gen2(diff_out)
 
-        # Fusion and residual connection
-        combined = self.fc2(self.activation(combined))
-        output = combined + input
+        # Adaptive Core for differences
+        adaptive_core_diff = self.adaptive_core_diff(input.mean(dim=1, keepdim=True))
+        diff_out = diff_out + adaptive_core_diff
+
+        # Stochastic pooling for trend and diff (if training)
+        if self.training:
+            trend_out = self._stochastic_pooling(trend_out, batch_size, channels)
+            diff_out = self._stochastic_pooling(diff_out, batch_size, channels)
+        else:
+            trend_out = self._weighted_sum(trend_out, channels)
+            diff_out = self._weighted_sum(diff_out, channels)
+
+        # Combine trend and differences
+        combined_mean = trend_out + diff_out
+
+        combined_mean = self.dropout2(combined_mean)
+
+        # MLP fusion
+        combined_mean_cat = torch.cat([input, combined_mean], -1)
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.dropout3(combined_mean_cat)
+        combined_mean_cat = self.gen4(combined_mean_cat)
+
+        # Add residual connection
+        output = combined_mean_cat + input
 
         return output, None
 
+    def _stochastic_pooling(self, combined_mean, batch_size, channels):
+        ratio = F.softmax(combined_mean, dim=1)
+        ratio = ratio.permute(0, 2, 1)
+        ratio = ratio.reshape(-1, channels)
+        indices = torch.multinomial(ratio, 1)
+        indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
+        pooled_mean = torch.gather(combined_mean, 1, indices)
+        return pooled_mean.repeat(1, channels, 1)
 
-class STAR3(nn.Module):
+    def _weighted_sum(self, combined_mean, channels):
+        weight = F.softmax(combined_mean, dim=1)
+        weighted_sum = torch.sum(combined_mean * weight, dim=1, keepdim=True)
+        return weighted_sum.repeat(1, channels, 1)
+
+
+
+class STAR2(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
