@@ -43,55 +43,49 @@ class PositionalEmbedding(nn.Module):
 
 
 
-class STAR44(nn.Module):
-    def __init__(self, d_series, d_core, num_links=5, dropout_rate=0.5, max_len=5000):
+class STAR(nn.Module):
+    def __init__(self, d_series, d_core, num_layers=5, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
-        Chain-like Network Architecture with Temporal Embeddings and Dropout
+        Rain-like Network Architecture with Temporal Embeddings and Dropout
         """
 
         # Pozicijska embeding komponenta
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
 
-        # Prva karika lanca
-        self.first_link = nn.Linear(d_series, d_core)
+        # Slojevi (nivoa kiše), svaki sloj predstavlja "padanje" kapljica ka dole
+        self.layers = nn.ModuleList([nn.Linear(d_series, d_core) for _ in range(num_layers)])
 
-        # Srednje karike lanca (dinamički generisane)
-        self.chain_links = nn.ModuleList([nn.Linear(d_core, d_core) for _ in range(num_links)])
-
-        # Poslednja karika lanca
-        self.last_link = nn.Linear(d_core, d_series)
+        # Poslednji sloj koji predstavlja tlo (spajanje svih kapljica u jednu)
+        self.output_layer = nn.Linear(d_core, d_series)
 
         # Dropout slojevi
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropouts = nn.ModuleList([nn.Dropout(dropout_rate) for _ in range(num_layers)])
 
         # Aktivacija
-        self.activation = LACU()
+        self.activation = LACA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
-        # Primjena temporalnog embeddinga
+        # Primjena temporalnog embeddinga, što može predstavljati "start" kišnih kapljica
         input = self.positional_embedding(input)
 
-        # Prolazak kroz prvu kariku lanca
-        out = self.activation(self.first_link(input))
-        out = self.dropout(out)
+        # Padanje kroz slojeve, svaki sloj je kao nivo gde kiša pada na različite dijelove podataka
+        out = input
+        for layer, dropout in zip(self.layers, self.dropouts):
+            out = self.activation(layer(out))
+            out = dropout(out)
 
-        # Prolazak kroz svaku srednju kariku lanca
-        for link in self.chain_links:
-            out = self.activation(link(out))
-            out = self.dropout(out)
+        # Konačno, svi podaci stižu do izlaznog sloja ("tlo")
+        out = self.output_layer(out)
 
-        # Prolazak kroz poslednju kariku lanca
-        out = self.activation(self.last_link(out))
-
-        # Dodajemo rezidualnu konekciju sa početnim ulazom
+        # Rezidualna konekcija koja spaja početni ulaz s krajnjim izlazom, omogućavajući stabilnost tokom "padanja" podataka
         output = out + input
 
         return output, None
 
-class STAR(nn.Module):
+class STA2R(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
