@@ -61,6 +61,8 @@ class STAR(nn.Module):
         self.dropout1 = nn.Dropout(dropout_rate)
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
+        
+        self.activation = LASA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -69,7 +71,7 @@ class STAR(nn.Module):
         input = self.temporal_embedding(input)
 
         # Set FFN
-        combined_mean = F.gelu(self.gen1(input))
+        combined_mean = self.activation(self.gen1(input))
         combined_mean = self.dropout1(combined_mean)  # Apply dropout
         combined_mean = self.gen2(combined_mean)
 
@@ -94,7 +96,7 @@ class STAR(nn.Module):
 
         # MLP fusion
         combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = F.gelu(self.gen3(combined_mean_cat))
+        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
         output = combined_mean_cat
@@ -116,7 +118,7 @@ class STAR2(nn.Module):
         # Dropout layers
         self.dropout = nn.Dropout(p=dropout_rate)
 
-        self.activation = F.gelu#LASA()
+        self.activation = self.activation#LASA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
