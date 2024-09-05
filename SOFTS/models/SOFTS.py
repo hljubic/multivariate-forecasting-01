@@ -129,7 +129,7 @@ class Model(nn.Module):
         self.encoder = Encoder(
             [
                 EncoderLayer(
-                    STAR(configs.d_model, configs.d_core, n_heads=configs.n_heads),  # Updated with n_heads
+                    STAR(configs.d_model, configs.d_core, n_heads=8),  # Updated with n_heads
                     configs.d_model,
                     configs.d_ff,
                     dropout=configs.dropout,
