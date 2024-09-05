@@ -48,11 +48,17 @@ class STAR(nn.Module):
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
-        # Hierarchical core layers
-        self.local_core1 = nn.Linear(d_series, d_core // 2)  # For local core 1
-        self.local_core2 = nn.Linear(d_series, d_core // 2)  # For local core 2
+        # Adaptive cores
+        self.adaptive_core1 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core2 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core3 = nn.Linear(d_series, d_core // 3)
 
-        self.global_core = nn.Linear(d_core, d_core)  # For global core combining
+        # MLP to combine the cores non-linearly
+        self.mlp = nn.Sequential(
+            nn.Linear(d_core, d_core),
+            nn.ReLU(),  # or use LASA activation here if needed
+            nn.Linear(d_core, d_core)
+        )
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -62,7 +68,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = nn.ReLU()  # Replace with LASA or any custom activation as needed
+        self.activation = nn.ReLU()  # Replace with LASA or other custom activation if required
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
@@ -72,22 +78,21 @@ class STAR(nn.Module):
         combined_mean = self.dropout1(combined_mean)  # Apply dropout
         combined_mean = self.gen2(combined_mean)
 
-        # Hierarchical Core Formation
-        # Divide input into two halves and compute local cores
-        input_half1 = input[:, :channels // 2, :]  # First half of the channels
-        input_half2 = input[:, channels // 2:, :]  # Second half of the channels
+        # Adaptive Core Formation
+        adaptive_core1 = self.adaptive_core1(input.mean(dim=1, keepdim=True))
+        adaptive_core2 = self.adaptive_core2(input.mean(dim=1, keepdim=True))
+        adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
 
-        local_core1 = self.local_core1(input_half1.mean(dim=1, keepdim=True))  # Local core for first half
-        local_core2 = self.local_core2(input_half2.mean(dim=1, keepdim=True))  # Local core for second half
+        # Concatenate the adaptive cores along the last dimension (features)
+        adaptive_core_concat = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3], dim=2)
 
-        # Combine the local cores to form the global core
-        hierarchical_core = torch.cat([local_core1, local_core2], dim=2)
-        hierarchical_core = self.global_core(hierarchical_core)  # Global core layer
+        # Pass the concatenated cores through the MLP to non-linearly combine them
+        enriched_core = self.mlp(adaptive_core_concat)
 
-        # Add hierarchical core to combined_mean
-        combined_mean = combined_mean + hierarchical_core
+        # Add the non-linearly combined core to the combined_mean
+        combined_mean = combined_mean + enriched_core
 
-        # Concatenate the input and combined result for the next layer
+        # Concatenate the input and the combined result for the next layer
         combined_mean_cat = torch.cat([input, combined_mean], dim=2)
 
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
@@ -98,7 +103,6 @@ class STAR(nn.Module):
         output = combined_mean_cat + input
 
         return output, None
-
 class STAR44(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -150,80 +154,6 @@ class STAR44(nn.Module):
 
         # self.activation(
         combined_mean = combined_mean + adaptive_core_concat
-
-        # Stochastic pooling
-        if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-            combined_mean = torch.gather(combined_mean, 1, indices)
-            combined_mean = combined_mean.repeat(1, channels, 1)
-        else:
-            weight = F.softmax(combined_mean, dim=1)
-            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
-
-        combined_mean = self.dropout2(combined_mean)  # Apply dropout
-
-        # MLP fusion
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
-
-        return output, None
-
-
-class STAR_(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings and Dropout
-        """
-
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-
-        # Adaptive Core Formation
-        self.adaptive_core1 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core2 = nn.Linear(d_series, d_core // 3)
-        self.adaptive_core3 = nn.Linear(d_series, d_core // 3)
-
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LASA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply temporal embedding
-        input = self.positional_embedding(input)
-
-        # Set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout1(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # Adaptive Core Formation
-        adaptive_core1 = self.adaptive_core1(input.mean(dim=1, keepdim=True))
-        adaptive_core2 = self.adaptive_core2(input.mean(dim=1, keepdim=True))
-        adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
-
-        # Calculating the arithmetic mean of the three adaptive cores
-        adaptive_core_mean = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3], dim=2)
-
-        combined_mean = combined_mean + adaptive_core_mean
 
         # Stochastic pooling
         if self.training:
