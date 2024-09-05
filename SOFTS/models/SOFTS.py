@@ -64,6 +64,8 @@ class STAR(nn.Module):
 
         self.activation = LASA()
 
+        self.use_norm = True
+
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
