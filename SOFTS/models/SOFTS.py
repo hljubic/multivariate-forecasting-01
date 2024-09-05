@@ -41,7 +41,60 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
 class STAR(nn.Module):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+        super(STAR, self).__init__()
+        """
+        Custom model with Convolutional layers and LayerNorm regularization
+        """
+
+        self.positional_embedding = PositionalEmbedding(d_series, max_len)
+        self.conv1 = nn.Conv1d(d_series, d_series, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv1d(d_series, d_core, kernel_size=3, padding=1)
+
+        # Adaptive Core Formation using GRU
+        self.gru = nn.GRU(d_series, d_core, batch_first=True)
+
+        self.fc1 = nn.Linear(d_series + d_core, d_series)
+        self.fc2 = nn.Linear(d_series, d_series)
+
+        # Using LayerNorm instead of Dropout
+        self.norm1 = nn.LayerNorm(d_series)
+        self.norm2 = nn.LayerNorm(d_core)
+
+        self.activation = LASA()
+
+    def forward(self, input, *args, **kwargs):
+        batch_size, channels, d_series = input.shape
+
+        # Apply temporal embedding
+        input = self.positional_embedding(input)
+
+        # Convolution layers instead of linear
+        conv_out = self.conv1(input.permute(0, 2, 1))  # Change input shape for Conv1d
+        conv_out = self.activation(self.conv2(conv_out)).permute(0, 2, 1)  # Back to (batch, seq_len, features)
+
+        # Adaptive Core Formation with GRU
+        gru_out, _ = self.gru(input)
+
+        # Concatenation and fusion
+        combined = torch.cat([conv_out, gru_out], -1)
+        combined = self.fc1(combined)
+        combined = self.norm1(combined)
+
+        # Fusion and residual connection
+        combined = self.fc2(self.activation(combined))
+        output = combined + input
+
+        return output, None
+
+
+class STAR3(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
