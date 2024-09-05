@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
+from layers.Kan import KAN, KANLinear
 
 class LASA(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
@@ -94,14 +95,6 @@ class STAR(nn.Module):
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
-        '''
-        # MLP fusion
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-        output = combined_mean_cat
-        '''
         # mlp fusion
         # Rezidualna konekcija s ulaznim podacima
         combined_mean_cat = torch.cat([input, combined_mean], -1)
@@ -190,7 +183,21 @@ class Model(nn.Module):
         )
 
         # Decoder
-        self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
+        #self.projection_old = nn.Linear(configs.d_model, configs.pred_len, bias=True)
+
+        self.projection = KANLinear(
+            in_features=configs.d_model,
+            out_features=configs.pred_len,
+            grid_size=5,  # povećano sa 5 na 10
+            spline_order=4,  # povećano sa 3 na 4
+            scale_noise=0.05,  # smanjeno sa 0.1 na 0.05
+            scale_base=1.5,  # povećano sa 1.0 na 1.5
+            scale_spline=1.5,  # povećano sa 1.0 na 1.5
+            enable_standalone_scale_spline=True,
+            base_activation=LASA,#nn.SiLU
+            grid_eps=0.02,
+            grid_range=[-1, 1]
+        )
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
