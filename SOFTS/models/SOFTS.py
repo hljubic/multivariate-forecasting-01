@@ -39,128 +39,8 @@ class PositionalEmbedding(nn.Module):
     def forward(self, x):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import math
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, sigma=1.0):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings, Dropout, and Gaussian Smoothing for differences.
-        """
-
-        # Positional embedding for trend and differences
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-
-        # Trend branch
-        self.trend_gen1 = nn.Linear(d_series, d_series)
-        self.trend_gen2 = nn.Linear(d_series, d_core)
-        self.adaptive_core_trend = nn.Linear(d_series, d_core)
-
-        # Difference branch
-        self.diff_gen1 = nn.Linear(d_series, d_series)
-        self.diff_gen2 = nn.Linear(d_series, d_core)
-        self.adaptive_core_diff = nn.Linear(d_series, d_core)
-
-        # Gaussian filter for smoothing diff_out
-        self.gaussian_filter = self.create_gaussian_filter(sigma, kernel_size=5, num_channels=d_core)
-
-        # Fusion layers
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LASA()  # Assuming LASA is a custom activation function
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply positional embedding
-        input = self.positional_embedding(input)
-
-        # === Trend Branch ===
-        trend_out = self.activation(self.trend_gen1(input))
-        trend_out = self.dropout1(trend_out)
-        trend_out = self.trend_gen2(trend_out)
-
-        # Adaptive Core for trend
-        adaptive_core_trend = self.adaptive_core_trend(input.mean(dim=1, keepdim=True))
-        trend_out = trend_out + adaptive_core_trend
-
-        # === Difference Branch ===
-        diff_out = self.activation(self.diff_gen1(input))
-        diff_out = self.dropout1(diff_out)
-        diff_out = self.diff_gen2(diff_out)
-
-        # Adaptive Core for differences
-        adaptive_core_diff = self.adaptive_core_diff(input.mean(dim=1, keepdim=True))
-        diff_out = diff_out + adaptive_core_diff
-
-        # Apply Gaussian Smoothing to diff_out
-        diff_out = diff_out.permute(0, 2, 1)  # Change shape for Conv1d (batch_size, channels, sequence_length)
-        diff_out = self.gaussian_filter(diff_out)
-        diff_out = diff_out.permute(0, 2, 1)  # Return to original shape
-
-        # Stochastic pooling for trend and diff (if training)
-        if self.training:
-            trend_out = self._stochastic_pooling(trend_out, batch_size, channels)
-            diff_out = self._stochastic_pooling(diff_out, batch_size, channels)
-        else:
-            trend_out = self._weighted_sum(trend_out, channels)
-            diff_out = self._weighted_sum(diff_out, channels)
-
-        # Combine trend and differences
-        combined_mean = trend_out + diff_out
-
-        combined_mean = self.dropout2(combined_mean)
-
-        # MLP fusion
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Add residual connection
-        output = combined_mean_cat + input
-
-        return output, None
-
-    def _stochastic_pooling(self, combined_mean, batch_size, channels):
-        ratio = F.softmax(combined_mean, dim=1)
-        ratio = ratio.permute(0, 2, 1)
-        ratio = ratio.reshape(-1, channels)
-        indices = torch.multinomial(ratio, 1)
-        indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-        pooled_mean = torch.gather(combined_mean, 1, indices)
-        return pooled_mean.repeat(1, channels, 1)
-
-    def _weighted_sum(self, combined_mean, channels):
-        weight = F.softmax(combined_mean, dim=1)
-        weighted_sum = torch.sum(combined_mean * weight, dim=1, keepdim=True)
-        return weighted_sum.repeat(1, channels, 1)
-
-    def create_gaussian_filter(self, sigma, kernel_size, num_channels):
-        # Create a Gaussian kernel
-        kernel = torch.tensor([math.exp(-(x - kernel_size // 2) ** 2 / (2 * sigma ** 2)) for x in range(kernel_size)])
-        kernel = kernel / kernel.sum()  # Normalize kernel
-
-        # Reshape to be applied to all channels
-        kernel = kernel.view(1, 1, -1)  # Shape: (out_channels, in_channels, kernel_size)
-        kernel = kernel.repeat(num_channels, 1, 1)  # Repeat for all channels
-
-        gaussian_filter = nn.Conv1d(in_channels=num_channels, out_channels=num_channels, kernel_size=kernel_size, padding=kernel_size // 2, groups=num_channels, bias=False)
-        gaussian_filter.weight.data = kernel
-        gaussian_filter.weight.requires_grad = False  # Kernel is not trainable
-        return gaussian_filter
-
-
-class STAR2(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -186,6 +66,13 @@ class STAR2(nn.Module):
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
+
+        if self.use_norm:
+            x_enc = input
+            means = x_enc.mean(1, keepdim=True).detach()
+            x_enc = x_enc - means
+            stdev = torch.sqrt(torch.var(x_enc, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            input /= stdev
 
         # Apply temporal embedding
         input = self.positional_embedding(input)
@@ -224,6 +111,9 @@ class STAR2(nn.Module):
         # Dodajemo rezidualnu konekciju
         output = combined_mean_cat + input
 
+        if self.use_norm:
+            output = output * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+            output = output + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
         return output, None
 
 
