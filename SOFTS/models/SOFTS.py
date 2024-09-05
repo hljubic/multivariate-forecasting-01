@@ -53,9 +53,9 @@ class STAR(nn.Module):
         self.gen2 = nn.Linear(d_series, d_core)
 
         # Adaptive Core Formation
-        self.adaptive_core1 = nn.Linear(d_series, d_core)
-        self.adaptive_core2 = nn.Linear(d_series, d_core)
-        self.adaptive_core3 = nn.Linear(d_series, d_core)
+        self.adaptive_core1 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core2 = nn.Linear(d_series, d_core // 3)
+        self.adaptive_core3 = nn.Linear(d_series, d_core // 3)
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -84,7 +84,7 @@ class STAR(nn.Module):
         adaptive_core3 = self.adaptive_core3(input.mean(dim=1, keepdim=True))
 
         # Calculating the arithmetic mean of the three adaptive cores
-        adaptive_core_mean = (adaptive_core1 + adaptive_core2 + adaptive_core3) / 3
+        adaptive_core_mean = torch.cat([adaptive_core1, adaptive_core2, adaptive_core3])
 
         combined_mean = combined_mean + adaptive_core_mean
 
