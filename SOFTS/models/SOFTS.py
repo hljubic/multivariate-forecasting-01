@@ -44,6 +44,7 @@ class PositionalEmbedding(nn.Module):
 
 
 
+from scipy.ndimage import gaussian_filter
 
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
