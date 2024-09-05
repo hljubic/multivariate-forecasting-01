@@ -42,7 +42,7 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-class STAR(nn.Module):
+class STAR44(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, temperature=1.0):
         super(STAR, self).__init__()
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
@@ -115,7 +115,7 @@ class STAR(nn.Module):
         output = self.norm2(combined_mean_cat + input)
 
         return output, None
-class STAR33(nn.Module):
+class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -154,11 +154,11 @@ class STAR33(nn.Module):
         adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
-        # Stochastic pooling
+        # Stohastičko uzorkovanje sa Gumbel-Softmax
         if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
+            gumbel_noise = -torch.log(-torch.log(torch.rand_like(combined_mean)))
+            combined_mean = F.softmax((combined_mean + gumbel_noise) / self.temperature, dim=1)
+            ratio = combined_mean.permute(0, 2, 1).reshape(-1, channels)
             indices = torch.multinomial(ratio, 1)
             indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
             combined_mean = torch.gather(combined_mean, 1, indices)
