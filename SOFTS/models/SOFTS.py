@@ -42,7 +42,7 @@ class STAR(nn.Module):
         # Dropout layers
         self.dropout = nn.Dropout(p=dropout_rate)
 
-        self.activation = LASA()
+        self.activation = nn.ReLU()#LASA()
 
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
