@@ -49,19 +49,14 @@ class STAR(nn.Module):
         """
         Rain-like Network Architecture with Temporal Embeddings and Dropout
         """
-
         # Pozicijska embeding komponenta
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
-
         # Slojevi (nivoa kiše), svaki sloj predstavlja "padanje" kapljica ka dole
         self.layers = nn.ModuleList([nn.Linear(d_series, d_core) for _ in range(num_layers)])
-
         # Poslednji sloj koji predstavlja tlo (spajanje svih kapljica u jednu)
         self.output_layer = nn.Linear(d_core, d_series)
-
         # Dropout slojevi
         self.dropouts = nn.ModuleList([nn.Dropout(dropout_rate) for _ in range(num_layers)])
-
         # Aktivacija
         self.activation = LACU()
 
@@ -71,14 +66,20 @@ class STAR(nn.Module):
         # Primjena temporalnog embeddinga, što može predstavljati "start" kišnih kapljica
         input = self.positional_embedding(input)
 
+        # Kreiramo akumulator za zbrajanje izlaza iz svakog sloja
+        cumulative_output = torch.zeros_like(input)
+
         # Padanje kroz slojeve, svaki sloj je kao nivo gde kiša pada na različite dijelove podataka
         out = input
         for layer, dropout in zip(self.layers, self.dropouts):
             out = self.activation(layer(out))
             out = dropout(out)
 
+            # Akumulacija izlaza iz svakog sloja
+            cumulative_output += out
+
         # Konačno, svi podaci stižu do izlaznog sloja ("tlo")
-        out = self.output_layer(out)
+        out = self.output_layer(cumulative_output)
 
         # Rezidualna konekcija koja spaja početni ulaz s krajnjim izlazom, omogućavajući stabilnost tokom "padanja" podataka
         output = out + input
