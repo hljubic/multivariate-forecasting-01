@@ -194,7 +194,7 @@ class Model(nn.Module):
             scale_base=1.5,  # povećano sa 1.0 na 1.5
             scale_spline=1.5,  # povećano sa 1.0 na 1.5
             enable_standalone_scale_spline=True,
-            base_activation=LASA,#nn.SiLU
+            base_activation=nn.SiLU,
             grid_eps=0.02,
             grid_range=[-1, 1]
         )
