@@ -46,10 +46,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
+    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000, segment_length=10):
         super(STAR, self).__init__()
         """
-        Adaptive STAR with Temporal Embeddings and Random Channel Dropping
+        Adaptive STAR with Temporal Embeddings and Random Segment Permutation between Channels
         """
 
         self.positional_embedding = PositionalEmbedding(d_series, max_len)
@@ -69,6 +69,37 @@ class STAR(nn.Module):
 
         self.activation = LACU()
 
+        # Segment length for random permutation
+        self.segment_length = segment_length
+
+    def random_permute_segments(self, input):
+        """
+        Nasumična permutacija segmenata između kanala.
+        """
+        batch_size, channels, d_series = input.shape
+
+        # Broj segmenata u seriji
+        num_segments = d_series // self.segment_length
+
+        # Podsecanje na segment_length
+        segmented_input = input[:, :, :num_segments * self.segment_length].reshape(
+            batch_size, channels, num_segments, self.segment_length
+        )
+
+        # Nasumična permutacija segmenata po kanalima
+        for b in range(batch_size):
+            permuted_indices = torch.randperm(channels)
+            segmented_input[b] = segmented_input[b, permuted_indices]
+
+        # Vraćanje u originalni oblik (batch_size, channels, d_series)
+        permuted_input = segmented_input.reshape(batch_size, channels, num_segments * self.segment_length)
+
+        # Ako je `d_series` nije deljivo sa `segment_length`, vraćamo preostale podatke na kraj
+        if d_series % self.segment_length != 0:
+            permuted_input = torch.cat([permuted_input, input[:, :, num_segments * self.segment_length:]], dim=2)
+
+        return permuted_input
+
     def forward(self, input, *args, **kwargs):
         batch_size, channels, d_series = input.shape
 
@@ -84,18 +115,13 @@ class STAR(nn.Module):
         adaptive_core = self.adaptive_core(input)
         combined_mean = combined_mean + adaptive_core
 
-        # Random channel dropping
+        # Random permutation of segments between channels
         if self.training:
-            # Kreiramo masku za dropanje kanala: 1 zadržava kanal, 0 isključuje kanal
-            random_channel_mask = (torch.rand(batch_size, channels, 1, device=input.device) > 0.5).float()
-            combined_mean = combined_mean * random_channel_mask  # Primena maske na kanale
-        else:
-            # U fazi evaluacije ne dropamo kanale, samo koristimo sve
-            combined_mean = combined_mean
+            combined_mean = self.random_permute_segments(combined_mean)
 
         combined_mean = self.dropout2(combined_mean)  # Apply dropout
 
-        # mlp fusion
+        # MLP fusion
         # Rezidualna konekcija s ulaznim podacima
         combined_mean_cat = torch.cat([input, combined_mean], -1)
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
@@ -106,6 +132,7 @@ class STAR(nn.Module):
         output = combined_mean_cat + input
 
         return output, None
+
 
 
 class STA4R(nn.Module):
