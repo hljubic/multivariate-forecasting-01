@@ -56,75 +56,7 @@ class STAR(nn.Module):
         # Adaptive Core Formation
         self.adaptive_core = nn.Linear(d_series, d_core)
 
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout1 = nn.Dropout(dropout_rate)
-        self.dropout2 = nn.Dropout(dropout_rate)
-        self.dropout3 = nn.Dropout(dropout_rate)
-
-        self.activation = LASA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Apply temporal embedding
-        input = self.positional_embedding(input)
-
-        # Set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout1(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # Adaptive Core Formation
-        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        combined_mean = combined_mean + adaptive_core
-
-        # Stochastic pooling
-        if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-            combined_mean = torch.gather(combined_mean, 1, indices)
-            combined_mean = combined_mean.repeat(1, channels, 1)
-        else:
-            weight = F.softmax(combined_mean, dim=1)
-            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
-
-        combined_mean = self.dropout2(combined_mean)  # Apply dropout
-
-        # mlp fusion
-        # Rezidualna konekcija s ulaznim podacima
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
-
-        return output, None
-
-class STAR44(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Adaptive STAR with Temporal Embeddings and Dropout
-        """
-
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-
-        # Adaptive Core Formation
-        self.adaptive_core = nn.Linear(d_series, d_core)
-
-        self.adaptive_core = nn.Linear(d_core, d_core)
-
-        nn.Sequential(
+        self.adaptive_core_mlp = nn.Sequential(
             nn.Linear(d_series, d_core),
             LACA(),
             nn.Linear(d_core, d_core)
@@ -155,14 +87,14 @@ class STAR44(nn.Module):
 
         # Adaptive Core Formation
         #adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
+        adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
-        # stochastic pooling
+        # Stohastičko uzorkovanje sa Gumbel-Softmax
         if self.training:
-            ratio = F.softmax(combined_mean, dim=1)
-            ratio = ratio.permute(0, 2, 1)
-            ratio = ratio.reshape(-1, channels)
+            gumbel_noise = -torch.log(-torch.log(torch.rand_like(combined_mean)))
+            combined_mean = F.softmax((combined_mean + gumbel_noise) / self.temperature, dim=1)
+            ratio = combined_mean.permute(0, 2, 1).reshape(-1, channels)
             indices = torch.multinomial(ratio, 1)
             indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
             combined_mean = torch.gather(combined_mean, 1, indices)
