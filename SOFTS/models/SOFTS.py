@@ -39,6 +39,8 @@ class PositionalEmbedding(nn.Module):
     def forward(self, x):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -64,7 +66,7 @@ class STAR(nn.Module):
         self.gate_weights = nn.Linear(d_series, 4)  # Generate gating values from input
 
         # Projection layer to align dimensions before addition
-        self.projection = nn.Linear(d_core, d_series)
+        self.projection = nn.Linear(d_core // 4 * 4, d_series)
 
         self.gen3 = nn.Linear(d_series + d_series, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -100,8 +102,8 @@ class STAR(nn.Module):
         gated_core3 = adaptive_core3 * self.gate3(gate3_value).unsqueeze(2)
         gated_core4 = adaptive_core4 * self.gate4(gate4_value).unsqueeze(2)
 
-        # Combine the gated cores
-        combined_gated_cores = gated_core1 + gated_core2 + gated_core3 + gated_core4
+        # Combine the gated cores (concatenate along feature dimension)
+        combined_gated_cores = torch.cat([gated_core1, gated_core2, gated_core3, gated_core4], dim=2)
 
         # Project combined gated cores to match the dimension of combined_mean
         combined_gated_cores = self.projection(combined_gated_cores)
