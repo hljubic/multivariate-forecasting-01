@@ -157,8 +157,7 @@ class Model(nn.Module):
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Apply cumulative sum transformation
-        x_enc_cumsum = x_enc.cumsum(dim=1)
-
+        x_enc_cumsum = x_enc
         # Normalization from Non-stationary Transformer
         if self.use_norm:
             means = x_enc_cumsum.mean(1, keepdim=True).detach()
@@ -166,10 +165,14 @@ class Model(nn.Module):
             stdev = torch.sqrt(torch.var(x_enc_cumsum, dim=1, keepdim=True, unbiased=False) + 1e-5)
             x_enc_cumsum /= stdev
 
+        x_enc_cumsum = x_enc.cumsum(dim=1)
+
         _, _, N = x_enc_cumsum.shape
         enc_out = self.enc_embedding(x_enc_cumsum, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
+
+        dec_out = torch.diff(torch.cat([torch.zeros_like(dec_out[:, :1]), dec_out], dim=1), dim=1)
 
         # De-Normalization from Non-stationary Transformer
         if self.use_norm:
@@ -177,7 +180,6 @@ class Model(nn.Module):
             dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
 
         # Reverse cumulative sum transformation (restore to original values)
-        dec_out = torch.diff(torch.cat([torch.zeros_like(dec_out[:, :1]), dec_out], dim=1), dim=1)
 
         return dec_out
 
