@@ -42,6 +42,7 @@ class PositionalEmbedding(nn.Module):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
 
+import random
 
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
