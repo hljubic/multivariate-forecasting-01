@@ -27,9 +27,9 @@ class LASA(nn.Module):
 
         return pos_part - neg_part
 
-class TemporalEmbedding(nn.Module):
+class PositionalEmbedding(nn.Module):
     def __init__(self, d_series, max_len=5000):
-        super(TemporalEmbedding, self).__init__()
+        super(PositionalEmbedding, self).__init__()
         self.position_embedding = nn.Parameter(torch.zeros(1, max_len, d_series), requires_grad=False)
         position = torch.arange(0, max_len).unsqueeze(1).float()
         div_term = torch.exp(torch.arange(0, d_series, 2).float() * -(torch.log(torch.tensor(10000.0)) / d_series))
@@ -47,7 +47,7 @@ class STAR(nn.Module):
         Adaptive STAR with Temporal Embeddings and Dropout
         """
 
-        self.temporal_embedding = TemporalEmbedding(d_series, max_len)
+        self.temporal_embedding = PositionalEmbedding(d_series, max_len)
         self.gen1 = nn.Linear(d_series, d_series)
         self.gen2 = nn.Linear(d_series, d_core)
 
@@ -99,58 +99,6 @@ class STAR(nn.Module):
         combined_mean_cat = torch.cat([input, combined_mean], -1)
         combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
         combined_mean_cat = self.dropout3(combined_mean_cat)  # Apply dropout
-        combined_mean_cat = self.gen4(combined_mean_cat)
-
-        # Dodajemo rezidualnu konekciju
-        output = combined_mean_cat + input
-
-        return output, None
-
-class STAR2(nn.Module):
-    def __init__(self, d_series, d_core, dropout_rate=0.1):
-        super(STAR, self).__init__()
-        """
-        STar Aggregate-Redistribute Module
-        """
-
-        self.gen1 = nn.Linear(d_series, d_series)
-        self.gen2 = nn.Linear(d_series, d_core)
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
-        self.gen4 = nn.Linear(d_series, d_series)
-
-        # Dropout layers
-        self.dropout = nn.Dropout(p=dropout_rate)
-
-        self.activation = self.activation#LASA()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # set FFN
-        combined_mean = self.activation(self.gen1(input))
-        combined_mean = self.dropout(combined_mean)  # Apply dropout
-        combined_mean = self.gen2(combined_mean)
-
-        # stochastic pooling
-        if self.training:
-            #ratio = F.softmax(combined_mean, dim=1)
-            #ratio = ratio.permute(0, 2, 1)
-            # ratio = ratio.reshape(-1, channels)
-            ratio = F.softmax(combined_mean, dim=1).permute(0, 2, 1).reshape(-1, channels)
-
-            indices = torch.multinomial(ratio, 1)
-            indices = indices.view(batch_size, -1, 1).permute(0, 2, 1)
-            combined_mean = torch.gather(combined_mean, 1, indices)
-            combined_mean = combined_mean.repeat(1, channels, 1)
-        else:
-            weight = F.softmax(combined_mean, dim=1)
-            combined_mean = torch.sum(combined_mean * weight, dim=1, keepdim=True).repeat(1, channels, 1)
-
-        # mlp fusion
-        # Rezidualna konekcija s ulaznim podacima
-        combined_mean_cat = torch.cat([input, combined_mean], -1)
-        combined_mean_cat = self.activation(self.gen3(combined_mean_cat))
-        combined_mean_cat = self.dropout(combined_mean_cat)  # Apply dropout
         combined_mean_cat = self.gen4(combined_mean_cat)
 
         # Dodajemo rezidualnu konekciju
