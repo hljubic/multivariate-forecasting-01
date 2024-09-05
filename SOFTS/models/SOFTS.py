@@ -42,7 +42,7 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-class STAR2(nn.Module):
+class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
