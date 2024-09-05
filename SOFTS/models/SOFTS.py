@@ -129,14 +129,11 @@ class STAR(nn.Module):
         # Adaptive Core Formation
         self.adaptive_core = nn.Linear(d_series, d_core)
 
-        self.adaptive_core_mlp2= nn.Sequential(
+        self.adaptive_core_mlp = nn.Sequential(
             nn.Linear(d_series, d_core),
-            nn.ReLU(),
+            LACA(),
             nn.Linear(d_core, d_core)
         )
-
-        self.adaptive_core_lstm = nn.LSTM(input_size=d_series, hidden_size=d_core // 2,
-                                          num_layers=1, batch_first=True, bidirectional=True)
 
         self.gen3 = nn.Linear(d_series + d_core, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
@@ -163,9 +160,7 @@ class STAR(nn.Module):
 
         # Adaptive Core Formation
         #adaptive_core = self.adaptive_core(input.mean(dim=1, keepdim=True))
-        #adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
-        adaptive_core, _ = self.adaptive_core_lstm(input.mean(dim=1, keepdim=True))  # (batch_size, 1, d_core)
-
+        adaptive_core = self.adaptive_core_mlp(input.mean(dim=1, keepdim=True))
         combined_mean = combined_mean + adaptive_core
 
         # Stohastičko uzorkovanje sa Gumbel-Softmax
