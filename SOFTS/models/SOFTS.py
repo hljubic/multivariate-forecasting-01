@@ -60,62 +60,8 @@ class CloudBlock(nn.Module):
             out = self.dropout(out)
         return out
 
+
 class STAR(nn.Module):
-    def __init__(self, d_series, d_core, num_layers=5, num_cloud_layers=3, dropout_rate=0.5, max_len=5000):
-        super(STAR, self).__init__()
-        """
-        Rain-like Network Architecture with Temporal Embeddings and Dropout
-        """
-
-        # Pozicijska embeding komponenta
-        self.positional_embedding = PositionalEmbedding(d_series, max_len)
-
-        # Oblaci (clouds) preprocesiraju podatke pre kišnih slojeva
-        self.cloud = CloudBlock(d_series, d_core, num_layers=num_cloud_layers, dropout_rate=dropout_rate)
-
-        # Slojevi (nivoa kiše), svaki sloj predstavlja "padanje" kapljica ka dole
-        self.layers = nn.ModuleList([nn.Linear(d_core, d_core) for _ in range(num_layers)])
-
-        # Poslednji sloj koji predstavlja tlo (spajanje svih kapljica u jednu)
-        self.output_layer = nn.Linear(d_core, d_series)
-
-        # Dropout slojevi
-        self.dropouts = nn.ModuleList([nn.Dropout(dropout_rate) for _ in range(num_layers)])
-
-        # Aktivacija
-        self.activation = LACU()
-
-    def forward(self, input, *args, **kwargs):
-        batch_size, channels, d_series = input.shape
-
-        # Primjena temporalnog embeddinga, što može predstavljati "start" kišnih kapljica
-        input = self.positional_embedding(input)
-
-        # Procesiranje podataka kroz oblake (clouds)
-        cloud_out = self.cloud(input)
-
-        # Kreiramo akumulator za zbrajanje izlaza iz svakog sloja
-        cumulative_output = torch.zeros_like(cloud_out)
-
-        # Padanje kroz slojeve, svaki sloj je kao nivo gde kiša pada na različite dijelove podataka
-        out = cloud_out
-        for layer, dropout in zip(self.layers, self.dropouts):
-            out = self.activation(layer(out))
-            out = dropout(out)
-
-            # Akumulacija izlaza iz svakog sloja
-            cumulative_output += out
-
-        # Konačno, svi podaci stižu do izlaznog sloja ("tlo")
-        out = self.output_layer(cumulative_output)
-
-        # Dodajemo rezidualnu konekciju koja spaja početni ulaz s krajnjim izlazom
-        output = out + input
-
-        return output, None
-
-
-class STA2R(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
         """
@@ -210,6 +156,32 @@ class Model(nn.Module):
         self.projection = nn.Linear(configs.d_model, configs.pred_len, bias=True)
 
     def forecast(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
+        # Apply cumulative sum transformation
+        x_enc_cumsum = x_enc.cumsum(dim=1)
+
+        # Normalization from Non-stationary Transformer
+        if self.use_norm:
+            means = x_enc_cumsum.mean(1, keepdim=True).detach()
+            x_enc_cumsum = x_enc_cumsum - means
+            stdev = torch.sqrt(torch.var(x_enc_cumsum, dim=1, keepdim=True, unbiased=False) + 1e-5)
+            x_enc_cumsum /= stdev
+
+        _, _, N = x_enc_cumsum.shape
+        enc_out = self.enc_embedding(x_enc_cumsum, x_mark_enc)
+        enc_out, attns = self.encoder(enc_out, attn_mask=None)
+        dec_out = self.projection(enc_out).permute(0, 2, 1)[:, :, :N]
+
+        # De-Normalization from Non-stationary Transformer
+        if self.use_norm:
+            dec_out = dec_out * (stdev[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+            dec_out = dec_out + (means[:, 0, :].unsqueeze(1).repeat(1, self.pred_len, 1))
+
+        # Reverse cumulative sum transformation (restore to original values)
+        dec_out = torch.diff(torch.cat([torch.zeros_like(dec_out[:, :1]), dec_out], dim=1), dim=1)
+
+        return dec_out
+
+    def forecas2t(self, x_enc, x_mark_enc, x_dec, x_mark_dec):
         # Normalization from Non-stationary Transformer
         if self.use_norm:
             means = x_enc.mean(1, keepdim=True).detach()
