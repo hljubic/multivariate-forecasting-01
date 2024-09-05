@@ -39,7 +39,6 @@ class PositionalEmbedding(nn.Module):
     def forward(self, x):
         x = x + self.position_embedding[:, :x.size(1)]
         return x
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -64,7 +63,10 @@ class STAR(nn.Module):
         self.gate4 = nn.Sigmoid()  # Gate for adaptive_core4
         self.gate_weights = nn.Linear(d_series, 4)  # Generate gating values from input
 
-        self.gen3 = nn.Linear(d_series + d_core, d_series)
+        # Projection layer to align dimensions before addition
+        self.projection = nn.Linear(d_core, d_series)
+
+        self.gen3 = nn.Linear(d_series + d_series, d_series)
         self.gen4 = nn.Linear(d_series, d_series)
 
         # Dropout layers
@@ -100,6 +102,9 @@ class STAR(nn.Module):
 
         # Combine the gated cores
         combined_gated_cores = gated_core1 + gated_core2 + gated_core3 + gated_core4
+
+        # Project combined gated cores to match the dimension of combined_mean
+        combined_gated_cores = self.projection(combined_gated_cores)
 
         # Add the gated cores to the combined_mean
         combined_mean = combined_mean + combined_gated_cores
