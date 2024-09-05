@@ -58,6 +58,7 @@ class STAR(nn.Module):
         # Dropout slojevi
         self.dropouts = nn.ModuleList([nn.Dropout(dropout_rate) for _ in range(num_layers)])
         # Aktivacija
+        self.num_layers = num_layers
         self.activation = LACU()
 
     def forward(self, input, *args, **kwargs):
@@ -79,7 +80,7 @@ class STAR(nn.Module):
             cumulative_output += out
 
         # Konačno, svi podaci stižu do izlaznog sloja ("tlo")
-        out = self.output_layer(cumulative_output)
+        out = self.output_layer(cumulative_output / self.num_layers)
 
         # Rezidualna konekcija koja spaja početni ulaz s krajnjim izlazom, omogućavajući stabilnost tokom "padanja" podataka
         output = out + input
