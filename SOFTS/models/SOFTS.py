@@ -150,7 +150,7 @@ class Model(nn.Module):
         enc_out = self.enc_embedding(x_enc, x_mark_enc)
         enc_out, attns = self.encoder(enc_out, attn_mask=None)
         dec_out = nn.Dropout(0.1)(LACU(self.projection1(enc_out)))
-        dec_out = self.projection2(enc_out).permute(0, 2, 1)[:, :, :N]
+        dec_out = self.projection2(dec_out).permute(0, 2, 1)[:, :, :N]
 
         # De-Normalization from Non-stationary Transformer
         if self.use_norm:
