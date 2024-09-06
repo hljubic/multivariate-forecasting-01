@@ -43,12 +43,6 @@ class PositionalEmbedding(nn.Module):
         return x
 
 
-from einops import rearrange, repeat
-import math
-
-# Funkcija za Cauchy CDF transformaciju
-def cauchy_cdf_transform(x):
-    return (1 / torch.pi) * torch.atan(x) + 0.5
 class STAR(nn.Module):
     def __init__(self, d_series, d_core, dropout_rate=0.5, max_len=5000):
         super(STAR, self).__init__()
@@ -80,8 +74,6 @@ class STAR(nn.Module):
         # Apply temporal embedding
         input = self.positional_embedding(input)
 
-        # Apply Cauchy CDF transform on each channel
-        input = cauchy_cdf_transform(input)
         # Set FFN
         combined_mean = self.activation(self.gen1(input))
         combined_mean = self.dropout1(combined_mean)  # Apply dropout
