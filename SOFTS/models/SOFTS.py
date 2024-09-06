@@ -65,7 +65,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = nn.Tanh()#LACU()
+        self.activation = LACU()
 
 
     def forward(self, input, *args, **kwargs):
