@@ -5,8 +5,37 @@ import torch.nn.functional as F
 from layers.Embed import DataEmbedding_inverted
 from layers.Transformer_EncDec import Encoder, EncoderLayer
 
+import torch
+import torch.nn as nn
 
 class LACU(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0, gamma=1.0):
+        super(LACU, self).__init__()
+        # Inicijalizacija parametara kao trenirajući parametri
+        self.alpha = nn.Parameter(torch.tensor(alpha))
+        self.beta = nn.Parameter(torch.tensor(beta))
+        self.gamma = nn.Parameter(torch.tensor(gamma))  # Parametar za prijelaz u linearnost
+
+    def forward(self, x):
+        # Kombinovanje operacija i eliminacija suvišnih relu poziva
+        relu_x = torch.clamp(x, min=0)  # Zamena za torch.relu(x)
+        relu_neg_x = torch.clamp(-x, min=0)  # Zamena za torch.relu(-x)
+
+        # Direktna primena kvadriranja
+        relu_neg_x_sq = relu_neg_x * relu_neg_x
+        relu_x_sq = relu_x * relu_x
+
+        # Kombinovanje računa
+        pos_part = 1 / (1 + self.alpha * relu_neg_x_sq)
+        # Prijelaz s kvadratnog oblika na linearni
+        neg_part = torch.where(relu_x_sq > self.gamma,
+                               self.gamma * relu_x,  # Linearni oblik
+                               1 / (1 + self.beta * relu_x_sq))  # Kvadratni oblik
+
+        # Konačni rezultat
+        return pos_part - neg_part
+
+class LACUorig(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0):
         super(LACU, self).__init__()
         # Inicijalizacija parametara kao trenirajući parametri
@@ -65,7 +94,7 @@ class STAR(nn.Module):
         self.dropout2 = nn.Dropout(dropout_rate)
         self.dropout3 = nn.Dropout(dropout_rate)
 
-        self.activation = nn.Tanh()#LACU()
+        self.activation = LACU()
 
 
     def forward(self, input, *args, **kwargs):
